@@ -21,16 +21,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Dep-carrying repos (connectors, artifacts with first-party deps) resolve
-    # @cinatra-ai/* packages from the AUTHENTICATED marketplace registry — it is
-    # not anonymous public-read by design. The org-level CINATRA_REGISTRY_TOKEN
-    # secret (a readonly consumer token) authenticates `pnpm install`; the repo's
-    # generated .npmrc references it as ${CINATRA_REGISTRY_TOKEN}. Standalone repos
-    # (skills/agents/etc.) resolve nothing from the registry and ignore it. GitHub
-    # withholds the secret from fork PRs by design, so a fork PR to a dep-carrying
-    # repo cannot install (expected; CI runs on push to main).
-    env:
-      CINATRA_REGISTRY_TOKEN: ${{ secrets.CINATRA_REGISTRY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,17 +31,37 @@ jobs:
       - name: Enable corepack
         run: corepack enable
 
+      - name: Classify repo (host-internal @cinatra-ai/* peers?)
+        # An extracted repo is a SOURCE MIRROR. If it declares any first-party
+        # @cinatra-ai/* (or @cinatra/*) package — sdk-extensions, sdk-ui, ... —
+        # those are host-internal monorepo packages, never published to a
+        # registry. They are PEERS the cinatra monorepo provides when it clones
+        # this repo into its workspace; they cannot be resolved standalone. Such
+        # repos are NOT standalone-typecheckable/-testable (the monorepo owns
+        # that), so the steps below skip those gates. Truly standalone repos
+        # (0 first-party deps) get the full typecheck + test.
+        run: |
+          if node -e "const p=require('./package.json');const b=[p.dependencies,p.peerDependencies,p.devDependencies,p.optionalDependencies];process.exit(b.some(x=>x&&Object.keys(x).some(k=>k.startsWith('@cinatra-ai/')||k.startsWith('@cinatra/')))?0:1)"; then
+            echo "first_party=1" >> "$GITHUB_ENV"
+            echo "Source mirror: declares host-internal @cinatra-ai/* peers — the cinatra monorepo provides/typechecks/tests these. Skipping standalone typecheck + test."
+          else
+            echo "first_party=0" >> "$GITHUB_ENV"
+            echo "Standalone repo: no host-internal @cinatra-ai/* peers — running full typecheck + test."
+          fi
+
       - name: Install dependencies
         # Extracted repos ship NO committed lockfile, so resolve fresh rather
-        # than fail on a frozen lockfile.
+        # than fail on a frozen lockfile. The .npmrc sets auto-install-peers=false
+        # so host-internal @cinatra-ai/* peers are never fetched (they aren't on
+        # any registry); only external (npmjs) deps install.
         run: corepack pnpm install --no-frozen-lockfile
 
       - name: Typecheck
         # Typecheck the repo's OWN TypeScript sources. Branch on what the repo
         # declares (not on a command's exit code, which `pnpm run --if-present`
-        # makes 0 even when the script is absent). ORDER MATTERS — an explicit
-        # `typecheck` script is authoritative and runs FIRST, so a repo that
-        # declares one can never be skipped, whatever its file extensions:
+        # makes 0 even when the script is absent). ORDER MATTERS:
+        #   - host-internal @cinatra-ai/* peers -> SKIP (not resolvable
+        #     standalone; the monorepo typechecks these).
         #   - has a `typecheck` script      -> run it (never skipped)
         #   - else NO tracked TS at all     -> nothing to typecheck. Content-only
         #     extensions (pure cinatra/** oas.json / SKILL.md / workflow.bpmn) ship
@@ -63,7 +73,10 @@ jobs:
         #     package ships two bins, tsc + tsserver, and dlx can't disambiguate).
         # The repo always ships a standalone tsconfig.json, so tsc has config.
         run: |
-          if node -e "process.exit(((require('./package.json').scripts)||{}).typecheck?0:1)"; then
+          if [ "$first_party" = "1" ]; then
+            echo "Skipping standalone typecheck (host-internal @cinatra-ai/* peers — the cinatra monorepo typechecks these)."
+            exit 0
+          elif node -e "process.exit(((require('./package.json').scripts)||{}).typecheck?0:1)"; then
             corepack pnpm run typecheck
           elif [ -z "$(git ls-files '*.ts' '*.tsx' '*.mts' '*.cts')" ]; then
             echo "No TypeScript sources tracked — nothing to typecheck (content-only extension)."
@@ -75,9 +88,18 @@ jobs:
           fi
 
       - name: Test
-        run: corepack pnpm test --if-present
+        # Host-internal-peer repos can't run their tests standalone (the tests
+        # import @cinatra-ai/* sources that resolve only in the monorepo); the
+        # monorepo runs them. Standalone repos run `test --if-present`.
+        run: |
+          if [ "$first_party" = "1" ]; then
+            echo "Skipping standalone tests (host-internal @cinatra-ai/* peers — the cinatra monorepo runs these)."
+            exit 0
+          fi
+          corepack pnpm test --if-present
 
       - name: Pack (dry run)
+        # Validates package shape + publish payload without resolving peers.
         run: npm pack --dry-run
 
   kind-gates:
