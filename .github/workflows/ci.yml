@@ -31,30 +31,54 @@ jobs:
       - name: Enable corepack
         run: corepack enable
 
-      - name: Classify repo (host-internal @cinatra-ai/* peers?)
-        # An extracted repo is a SOURCE MIRROR. If it declares any first-party
-        # @cinatra-ai/* (or @cinatra/*) package — sdk-extensions, sdk-ui, ... —
-        # those are host-internal monorepo packages, never published to a
-        # registry. They are PEERS the cinatra monorepo provides when it clones
-        # this repo into its workspace; they cannot be resolved standalone. Such
-        # repos are NOT standalone-typecheckable/-testable (the monorepo owns
-        # that), so the steps below skip those gates. Truly standalone repos
-        # (0 first-party deps) get the full typecheck + test.
+      - name: Classify repo + validate first-party dep shape
+        # An extracted repo is a SOURCE MIRROR. Host-internal @cinatra-ai/* (and
+        # @cinatra/*) packages — sdk-extensions, sdk-ui, ... — live ONLY in the
+        # cinatra monorepo and are never published to a registry; here they are
+        # declared as OPTIONAL peerDependencies the monorepo provides when it
+        # clones this repo into its workspace. Such repos are NOT
+        # standalone-installable/-typecheckable/-testable (the monorepo owns
+        # that), so install/typecheck/test below are skipped. To keep that skip
+        # HONEST, FAIL (exit 2) if any first-party package leaked into
+        # dependencies/devDependencies/optionalDependencies, or if a first-party
+        # peer is missing peerDependenciesMeta.optional — either would hide a real
+        # direct-dependency regression behind the skip. Truly standalone repos
+        # (0 first-party deps) get the full install + typecheck + test.
         run: |
-          if node -e "const p=require('./package.json');const b=[p.dependencies,p.peerDependencies,p.devDependencies,p.optionalDependencies];process.exit(b.some(x=>x&&Object.keys(x).some(k=>k.startsWith('@cinatra-ai/')||k.startsWith('@cinatra/')))?0:1)"; then
+          code=0
+          node -e '
+            const p = require("./package.json");
+            const fp = (o) => Object.keys(o || {}).filter((k) => k.startsWith("@cinatra-ai/") || k.startsWith("@cinatra/"));
+            const leaked = [...fp(p.dependencies), ...fp(p.devDependencies), ...fp(p.optionalDependencies)];
+            if (leaked.length) { console.error("First-party packages must be OPTIONAL peerDependencies, not deps/devDeps: " + leaked.join(", ")); process.exit(2); }
+            const peers = fp(p.peerDependencies);
+            const meta = p.peerDependenciesMeta || {};
+            const notOptional = peers.filter((k) => !(meta[k] && meta[k].optional === true));
+            if (notOptional.length) { console.error("First-party peer(s) must be marked peerDependenciesMeta.optional: " + notOptional.join(", ")); process.exit(2); }
+            process.exit(peers.length ? 0 : 1);
+          ' || code=$?
+          if [ "$code" -eq 2 ]; then
+            echo "::error::First-party @cinatra-ai/* dependency-shape regression (see above)."
+            exit 1
+          elif [ "$code" -eq 0 ]; then
             echo "first_party=1" >> "$GITHUB_ENV"
-            echo "Source mirror: declares host-internal @cinatra-ai/* peers — the cinatra monorepo provides/typechecks/tests these. Skipping standalone typecheck + test."
+            echo "Source mirror: declares host-internal @cinatra-ai/* optional peers — the cinatra monorepo provides/builds/typechecks/tests these. Skipping standalone install + typecheck + test."
           else
             echo "first_party=0" >> "$GITHUB_ENV"
-            echo "Standalone repo: no host-internal @cinatra-ai/* peers — running full typecheck + test."
+            echo "Standalone repo: no host-internal @cinatra-ai/* peers — running full install + typecheck + test."
           fi
 
       - name: Install dependencies
-        # Extracted repos ship NO committed lockfile, so resolve fresh rather
-        # than fail on a frozen lockfile. The .npmrc sets auto-install-peers=false
-        # so host-internal @cinatra-ai/* peers are never fetched (they aren't on
-        # any registry); only external (npmjs) deps install.
-        run: corepack pnpm install --no-frozen-lockfile
+        # Skipped for source mirrors: host-internal @cinatra-ai/* peers can't be
+        # resolved standalone (they're on no registry), and the monorepo installs
+        # them. Standalone repos resolve fresh — they ship no committed lockfile,
+        # so --no-frozen-lockfile rather than fail on a frozen lockfile.
+        run: |
+          if [ "$first_party" = "1" ]; then
+            echo "Skipping standalone install (host-internal @cinatra-ai/* peers — the cinatra monorepo resolves these)."
+            exit 0
+          fi
+          corepack pnpm install --no-frozen-lockfile
 
       - name: Typecheck
         # Typecheck the repo's OWN TypeScript sources. Branch on what the repo
