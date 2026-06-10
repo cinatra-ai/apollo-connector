@@ -26,5 +26,7 @@ jobs:
       contents: read
       id-token: write       # build-provenance attestation
       attestations: write
-    uses: cinatra-ai/.github/.github/workflows/reusable-extension-release.yml@main
+    # cinatra-ai/.github publishes no tags; pinned to its current main HEAD
+    # (re-resolve + bump the SHA when the reusable release workflow changes).
+    uses: cinatra-ai/.github/.github/workflows/reusable-extension-release.yml@ff3118c78764de583256a14d9878dd6b1b130071 # v0.0.0-main.ff3118c
     secrets: inherit
