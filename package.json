@@ -12,7 +12,8 @@
     "./setup-page": "./src/setup-page.tsx",
     "./mcp-handlers": "./src/mcp/handlers.ts",
     "./mcp-module": "./src/mcp/module.ts",
-    "./widgets": "./src/widgets/index.ts"
+    "./widgets": "./src/widgets/index.ts",
+    "./widgets/manifest": "./src/widgets/manifest.ts"
   },
   "types": "src/index.ts",
   "dependencies": {
