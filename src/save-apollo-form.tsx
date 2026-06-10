@@ -36,10 +36,16 @@ export function SaveApolloForm({
         body: "Your Apollo API key has been validated and stored.",
         kind: "success",
       });
-    } catch (error) {
+    } catch {
+      // Never surface the caught error's message: in a Next.js production
+      // build a thrown Server Action error reaches this catch with its real
+      // message replaced by the framework's generic masking blurb, so piping
+      // `error.message` into the toast would render that blurb instead of
+      // useful copy. The friendly operation-specific body is unconditional;
+      // the real failure detail stays in server-side logs.
       addNotification({
         title: "Apollo save failed",
-        body: error instanceof Error ? error.message : "Unable to save the Apollo connection.",
+        body: "Unable to save the Apollo connection.",
         kind: "error",
       });
     }
