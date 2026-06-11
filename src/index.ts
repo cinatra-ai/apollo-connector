@@ -13,6 +13,7 @@ import {
 // read/written through the SDK's GENERIC accessor (no per-connector host
 // binding). The connector carries no non-SDK `@cinatra-ai/*` code dependency.
 import { getApolloDeps } from "./deps";
+import { makeApolloLoggingSettings } from "./logging-settings-core";
 
 const APOLLO_PACKAGE_ID = "@cinatra-ai/apollo-connector";
 const APOLLO_CONFIG_KEY = "apollo";
@@ -130,12 +131,15 @@ export async function getConfiguredApolloAPIKey(opts?: { forceRefresh?: boolean 
     : null;
 }
 
+// Built on the shared leaf core (./logging-settings-core) so this SDK-backed
+// build site and the serverEntry capability build site can never drift.
+const sdkBackedLoggingSettings = makeApolloLoggingSettings({
+  read: (key, fallback) => getExtensionConnectorConfig(APOLLO_PACKAGE_ID, key, fallback),
+  write: (key, value) => setExtensionConnectorConfig(APOLLO_PACKAGE_ID, key, value),
+});
+
 export function getApolloLoggingSettings() {
-  const settings = readSettings();
-  return {
-    enabled: settings.loggingEnabled !== false,
-    directory: APOLLO_API_LOG_DIRECTORY,
-  };
+  return sdkBackedLoggingSettings.get();
 }
 
 export function getApolloAPIStatus() {
@@ -311,10 +315,7 @@ export async function saveApolloAPISettings(input: { apiKey?: string; loggingEna
 }
 
 export async function saveApolloLoggingSettings(enabled: boolean) {
-  writeSettings({
-    ...readSettings(),
-    loggingEnabled: enabled,
-  });
+  await sdkBackedLoggingSettings.save(enabled);
 }
 
 export async function clearApolloAPISettings() {
