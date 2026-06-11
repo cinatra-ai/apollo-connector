@@ -14,8 +14,11 @@
 import type {
   ExtensionHostContext,
   HostNangoConnectionStorageService,
+  HostConnectorConfigService,
 } from "@cinatra-ai/sdk-extensions";
 import { registerApolloConnector, type ApolloConnectorDeps } from "./deps";
+import { makeApolloLoggingSettings } from "./logging-settings-core";
+import { APOLLO_API_LOG_DIRECTORY } from "./log-directory";
 
 const PACKAGE_NAME = "@cinatra-ai/apollo-connector";
 
@@ -31,6 +34,8 @@ function hostService<T>(ctx: ExtensionHostContext, capability: string): T {
 }
 
 export function register(ctx: ExtensionHostContext): void {
+  const config = () =>
+    hostService<HostConnectorConfigService>(ctx, "@cinatra-ai/host:connector-config");
   const nango = () =>
     hostService<HostNangoConnectionStorageService>(
       ctx,
@@ -68,4 +73,24 @@ export function register(ctx: ExtensionHostContext): void {
   };
 
   registerApolloConnector(deps);
+
+  // Lazy/guarded host-access cutover: the host's telemetry/
+  // logging surfaces (campaign actions, telemetry page, log clearing) resolve
+  // this connector's logging settings through the `llm-provider-surface`
+  // capability instead of value-importing the package. Built on the shared
+  // leaf core with the ctx-resolved connector-config service (same KV row as
+  // the SDK-backed build site). Provider absence degrades per call.
+  const loggingSettings = makeApolloLoggingSettings({
+    read: (key, fallback) => config().read(key, fallback),
+    write: (key, value) => config().write(key, value),
+  });
+  ctx.capabilities.registerProvider("llm-provider-surface", {
+    packageName: PACKAGE_NAME,
+    impl: {
+      providerId: "apollo",
+      getLoggingSettings: () => loggingSettings.get(),
+      saveLoggingSettings: (enabled: boolean) => loggingSettings.save(enabled),
+      logDirectory: APOLLO_API_LOG_DIRECTORY,
+    },
+  });
 }
