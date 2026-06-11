@@ -1,6 +1,10 @@
 {
   "name": "@cinatra-ai/apollo-connector",
   "version": "0.1.0",
+  "files": [
+    "src",
+    "!src/__tests__"
+  ],
   "license": "Apache-2.0",
   "type": "module",
   "main": "src/index.ts",
