@@ -23,10 +23,10 @@ on:
 jobs:
   release:
     permissions:
-      contents: read
+      contents: write       # GitHub Release decoration (PR-list notes + tarball/checksums assets)
       id-token: write       # build-provenance attestation
       attestations: write
     # cinatra-ai/.github publishes no tags; pinned to its current main HEAD
     # (re-resolve + bump the SHA when the reusable release workflow changes).
-    uses: cinatra-ai/.github/.github/workflows/reusable-extension-release.yml@ff3118c78764de583256a14d9878dd6b1b130071 # v0.0.0-main.ff3118c
+    uses: cinatra-ai/.github/.github/workflows/reusable-extension-release.yml@101a06e0a5ab0a6c4c0e6d4340ff7a84042a4528 # v0.0.0-main.101a06e
     secrets: inherit
