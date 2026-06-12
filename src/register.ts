@@ -3,7 +3,9 @@
 // Transport-registration cutover: the host no longer statically imports `registerApolloConnector` — this
 // entry binds the connector's host deps AT ACTIVATION by adapting the
 // per-concern host services published in the capability registry
-// (`@cinatra-ai/host:nango-connection-storage`) plus the granted
+// (`@cinatra-ai/host:connector-config`) plus the connector-authored
+// `nango-system` surface (the legacy `@cinatra-ai/host:nango-connection-storage`
+// adapter id is retired — cinatra#151 Stage 3) and the granted
 // `ctx.telemetry` port for usage emission. Every adapter field resolves the
 // host service LAZILY at call time, so activation order against the host's
 // boot imports never matters.
@@ -13,8 +15,8 @@
 
 import type {
   ExtensionHostContext,
-  HostNangoConnectionStorageService,
   HostConnectorConfigService,
+  NangoSystemSurface,
 } from "@cinatra-ai/sdk-extensions";
 import { registerApolloConnector, type ApolloConnectorDeps } from "./deps";
 import { makeApolloLoggingSettings } from "./logging-settings-core";
@@ -27,7 +29,7 @@ function hostService<T>(ctx: ExtensionHostContext, capability: string): T {
   if (!provider) {
     throw new Error(
       `${PACKAGE_NAME}: host service "${capability}" is not registered — ` +
-        `the host boot wiring (register-transport-connectors) must run before connector calls.`,
+        `the host boot wiring (register-host-connector-services) must run before connector calls.`,
     );
   }
   return provider.impl as T;
@@ -36,35 +38,51 @@ function hostService<T>(ctx: ExtensionHostContext, capability: string): T {
 export function register(ctx: ExtensionHostContext): void {
   const config = () =>
     hostService<HostConnectorConfigService>(ctx, "@cinatra-ai/host:connector-config");
-  const nango = () =>
-    hostService<HostNangoConnectionStorageService>(
-      ctx,
-      "@cinatra-ai/host:nango-connection-storage",
-    );
+  // The connector-authored nango-system surface (registered by the nango
+  // gateway's own register(ctx) — a systemExtension, required at boot).
+  const nango = (): NangoSystemSurface => {
+    const provider = ctx.capabilities.resolveProviders("nango-system")[0];
+    const surface = provider?.impl as NangoSystemSurface | undefined;
+    if (!surface || typeof surface.isNangoConfigured !== "function") {
+      throw new Error(
+        `${PACKAGE_NAME}: the "nango-system" capability surface is not registered — ` +
+          `resolve at call time (post-activation), never at module eval.`,
+      );
+    }
+    return surface;
+  };
 
   const deps: ApolloConnectorDeps = {
+    // Members delegate to the nango-system surface at CALL time (key maps are
+    // getters for the same reason). Inputs are cast at this boundary where the
+    // surface owns the wider shape (required displayName / NangoConnectorKey
+    // union / record shape) — this connector only ever passes valid values.
     nango: {
-      isConfigured: () => nango().isConfigured(),
+      isConfigured: () => nango().isNangoConfigured(),
       getPrimarySavedConnection: (connectorKey) =>
-        nango().getPrimarySavedConnection(connectorKey) as ReturnType<
-          ApolloConnectorDeps["nango"]["getPrimarySavedConnection"]
-        >,
-      ensureIntegration: (input) => nango().ensureIntegration(input),
+        nango().getPrimarySavedNangoConnection(connectorKey),
+      ensureIntegration: (input) =>
+        nango().ensureNangoIntegration(input as Parameters<NangoSystemSurface["ensureNangoIntegration"]>[0]),
       // Apollo imports WITHOUT `connectorKey` (verified write-then-read-back),
       // then saves the pointer explicitly — matching the previous host binding.
-      importConnection: (input) => nango().importConnection(input),
+      importConnection: (input) =>
+        nango().importNangoConnection(input as Parameters<NangoSystemSurface["importNangoConnection"]>[0]),
       saveConnectionRecord: (connectorKey, record, opts) =>
-        nango().saveConnectionRecord(connectorKey, record, opts),
+        nango().saveNangoConnectionRecord(
+          connectorKey,
+          record as Parameters<NangoSystemSurface["saveNangoConnectionRecord"]>[1],
+          opts,
+        ),
       getCredentials: (providerConfigKey, connectionId, opts) =>
-        nango().getCredentials(providerConfigKey, connectionId, opts),
+        nango().getNangoCredentials(providerConfigKey, connectionId, opts),
       deleteConnection: (providerConfigKey, connectionId) =>
-        nango().deleteConnection(providerConfigKey, connectionId),
-      clearConnectionRecords: (connectorKey) => nango().clearConnectionRecords(connectorKey),
+        nango().deleteNangoConnection(providerConfigKey, connectionId),
+      clearConnectionRecords: (connectorKey) => nango().clearNangoConnectionRecords(connectorKey),
       get providerConfigKeys() {
-        return nango().providerConfigKeys as ApolloConnectorDeps["nango"]["providerConfigKeys"];
+        return nango().providerConfigKeys;
       },
       get connectionIds() {
-        return nango().connectionIds as ApolloConnectorDeps["nango"]["connectionIds"];
+        return nango().connectionIds;
       },
     },
     // Fire-and-forget by the telemetry port contract — matches the previous
