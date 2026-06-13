@@ -1,0 +1,34 @@
+name: truthful-attribution-gate
+# Thin caller for the org-reusable truthful-attribution-gate (cinatra-ai/ci),
+# per ratified spec cinatra-engineering#119 (re-scopes/supersedes #116). WARN mode
+# (eng#119 §7 step 6 rollout): findings are annotated, the check is ALWAYS green —
+# it never fails a PR. No .github/gate-suite.json committed (WARN scope exercises
+# presence + the human arm; the gate-suite arm is not exercised without a suite).
+# Pinned to the immutable ci engine SHA proven green in the cinatra ENFORCE gate
+# today; the `# vX.Y.Z` marker on the `uses:` line tracks the org ci milestone, as
+# every other cinatra-ai/ci gate caller in this repo does (the 40-char SHA is the
+# source of truth; the marker is advisory).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  # actions:read is MANDATORY: the engine resolves a reusable-workflow check-run to
+  # its Actions run (GET /actions/runs/{id}) to verify referenced_workflows[] at the
+  # pinned SHA. With an explicit permissions block, any omitted scope defaults to
+  # `none`, and a called reusable workflow cannot exceed the caller's grant — so
+  # omitting this causes startup_failure (red/missing check), which WARN mode CANNOT
+  # rescue (it fails before any step runs). Do not drop this line.
+  actions: read
+
+jobs:
+  truthful-attribution-gate:                 # caller job id MUST stay this exact string
+    uses: cinatra-ai/ci/.github/workflows/truthful-attribution-gate.yml@8eede1022e835997d94974e4bd6205daf72131a2 # v0.1.0
+    with:
+      mode: warn
+      ref: 8eede1022e835997d94974e4bd6205daf72131a2
