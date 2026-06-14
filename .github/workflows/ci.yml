@@ -131,10 +131,20 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      # NOTE: kind-specific gates are appended here by the extraction script.
-      # For workflow/agent kinds the placeholder below is replaced with a step
-      # that runs the self-contained, zero-dependency `extension-kind-gate.mjs`
-      # shipped into the repo (plain `node`, no @cinatra-ai dependency).
-      # Other kinds (connector, artifact, skill) have no extra gate today.
-      - name: No kind-specific gate
-        run: echo "No kind-specific gate for this extension kind."
+      # NOTE: the extension validator step is injected here by the extraction
+      # script. For EVERY recognized kind (agent, connector, artifact, skill,
+      # workflow) the placeholder is replaced with a step that runs the
+      # self-contained, zero-dependency `extension-kind-gate.mjs` shipped into the
+      # repo (plain `node`, no @cinatra-ai dependency, no registry) — it enforces
+      # the extension→host rules that DEFINE a valid extension. Only an
+      # unrecognized kind keeps the placeholder.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+      - name: Connector extension validator (manifest + shape + IoC + README/license)
+        # Validate this repo against the extension→host rules that DEFINE a valid
+        # extension, via the self-contained, zero-dependency gate shipped in this
+        # repo (no @cinatra-ai dependency, no registry). The authoritative
+        # Profile-1.0 BPMN compile / full OAS runtime-invariant validation /
+        # trust+signature checks re-run marketplace-side at publish/install.
+        run: node extension-kind-gate.mjs --package-root .
