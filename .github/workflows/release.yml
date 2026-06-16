@@ -13,8 +13,8 @@
 name: release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
   # Manual backfill: the reusable workflow REFUSES a dispatch unless it is run
   # against a TAG ref equal to v<package.json.version> (a branch HEAD can never
   # publish). Run it from the tag, e.g. `gh workflow run release.yml --ref v1.2.3`.
@@ -28,5 +28,5 @@ jobs:
       attestations: write
     # cinatra-ai/.github publishes no tags; pinned to its current main HEAD
     # (re-resolve + bump the SHA when the reusable release workflow changes).
-    uses: cinatra-ai/.github/.github/workflows/reusable-extension-release.yml@9bdf7f1abfe38c6bb710d46def7c415906713902 # v0.1.0
+    uses: cinatra-ai/.github/.github/workflows/reusable-extension-release.yml@fea09b38e94c0a64f7fab3c02d34b0fe1ecf746d # v0.1.0
     secrets: inherit
