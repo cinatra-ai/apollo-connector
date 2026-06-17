@@ -78,11 +78,14 @@ export function register(ctx: ExtensionHostContext): void {
       deleteConnection: (providerConfigKey, connectionId) =>
         nango().deleteNangoConnection(providerConfigKey, connectionId),
       clearConnectionRecords: (connectorKey) => nango().clearNangoConnectionRecords(connectorKey),
+      // Vendor identity is OPEN at the SDK (#12): the surface's key maps are
+      // `Record<string, string>` (no SDK-frozen union), so this connector
+      // projects ITS OWN key out of the open map at the boundary.
       get providerConfigKeys() {
-        return nango().providerConfigKeys;
+        return { apollo: nango().providerConfigKeys.apollo };
       },
       get connectionIds() {
-        return nango().connectionIds;
+        return { apollo: nango().connectionIds.apollo };
       },
     },
     // Fire-and-forget by the telemetry port contract — matches the previous
