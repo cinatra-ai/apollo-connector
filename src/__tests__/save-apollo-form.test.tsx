@@ -27,6 +27,7 @@ vi.mock("../actions", () => ({
 
 import { SaveApolloForm } from "../save-apollo-form";
 import { saveApolloConnectionAction } from "../actions";
+import { Button } from "../components/ui/button";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -62,7 +63,7 @@ async function renderAndSubmit(): Promise<void> {
   await act(async () => {
     root.render(
       <SaveApolloForm>
-        <button type="submit">Save</button>
+        <Button type="submit">Save</Button>
       </SaveApolloForm>,
     );
   });
