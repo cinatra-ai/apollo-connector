@@ -7,8 +7,7 @@
  * reaches the client `catch`. The form's failure notification must therefore
  * carry friendly, operation-specific copy — never the caught
  * `error.message` — or production users see the masking paragraph as the
- * toast body. (Host-side precedent: cinatra-ai/cinatra#51; connector rollout:
- * cinatra-ai/cinatra-engineering#67.)
+ * toast body. (Host-side precedent: cinatra-ai/cinatra#51.)
  */
 import * as React from "react";
 import { act } from "react";
