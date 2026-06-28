@@ -4,7 +4,7 @@
 # recurse for export-ignore. The slash-less dir rules alongside them drop the
 # (otherwise empty) directory entries themselves from the archive. npm tarball
 # contents are governed separately by the package.json "files" allowlist.
-# Refs cinatra-ai/cinatra-engineering#56.
+# Per the org release-artifact standard.
 .github export-ignore
 .github/** export-ignore
 .gitattributes export-ignore

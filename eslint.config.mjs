@@ -1,6 +1,6 @@
 // ESLint config for this extracted-extension source mirror. Its only lint
-// surface is the org ui-design-system gate ("UI work uses shadcn" —
-// cinatra-ai/cinatra-engineering#62): tools/ui-design-system.flat.mjs is a
+// surface is the org ui-design-system gate ("UI work uses shadcn"):
+// tools/ui-design-system.flat.mjs is a
 // byte-identical vendored copy of
 // cinatra-ai/ci/config/ui-design-system.flat.mjs
 // @ ee01071f703412c4aa6e6b2fb16b089cb8bbeac0 (the same ci commit the thin
