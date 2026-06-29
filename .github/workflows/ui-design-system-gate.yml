@@ -1,7 +1,7 @@
 name: ui-design-system-gate
 
 # Thin caller for the org-wide shadcn design-system gate
-# (cinatra-ai/cinatra-engineering#62 — rollout to the applicable-repo
+# (org-wide rollout to the applicable-repo
 # inventory). This repo's eslint.config.mjs spreads the preset vendored
 # byte-identically at tools/ui-design-system.flat.mjs from the SAME ci
 # commit this caller pins, so the workflow and the config it runs are
