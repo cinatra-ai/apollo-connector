@@ -1,7 +1,7 @@
 name: truthful-attribution-gate
 # Thin caller for the org-reusable truthful-attribution-gate (cinatra-ai/ci),
-# per ratified spec cinatra-engineering#119 (re-scopes/supersedes #116). WARN mode
-# (eng#119 §7 step 6 rollout): findings are annotated, the check is ALWAYS green —
+# per the ratified truthful-attribution spec. WARN mode
+# (rollout): findings are annotated, the check is ALWAYS green —
 # it never fails a PR. No .github/gate-suite.json committed (WARN scope exercises
 # presence + the human arm; the gate-suite arm is not exercised without a suite).
 # Pinned to the immutable ci engine SHA proven green in the cinatra ENFORCE gate
