@@ -1,7 +1,7 @@
 import { clearApolloConnectionAction } from "./actions";
 import { SaveApolloForm } from "./save-apollo-form";
 import { getApolloAPISettings, getApolloAPIStatus } from "./index";
-import { Main, PageHeader, PageContent, StatusPill, type StatusPillStatus } from "@cinatra-ai/sdk-ui/marketplace";
+import { Main, PageHeader, PageContent } from "@cinatra-ai/sdk-ui/marketplace";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Alert, AlertTitle, AlertDescription } from "./components/ui/alert";
@@ -11,25 +11,22 @@ type SettingsApolloPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function apolloStatusToPill(status: string): { pill: StatusPillStatus; label: string } {
-  if (status === "connected") return { pill: "approved", label: "Connected" };
-  if (status === "incomplete") return { pill: "needs-review", label: "Setup required" };
-  return { pill: "idle", label: "Optional" };
-}
-
 export async function ApolloSettingsPage({ searchParams: _searchParams }: SettingsApolloPageProps) {
   // getApolloAPISettings still drives the "Leave blank to keep" affordance;
   // logging is owned by /configuration/telemetry now (toggle removed here).
   void getApolloAPISettings();
   const status = getApolloAPIStatus();
-  const { pill, label } = apolloStatusToPill(status.status);
 
   return (
     <Main className="min-h-screen">
+      {/* The connection-status badge is HOST-injected on the connector
+          setup-page dispatch route — the same badge the /connectors card
+          shows — so the extension no longer renders its own status pill in
+          the header (it would duplicate the host badge). The title + form
+          stay extension-owned; status still drives the form affordances below. */}
       <PageHeader
         title="Apollo"
         description="Apollo is optional and is used by the Ross Index source as an enrichment layer for companies and founders. Cinatra keeps personal email reveal disabled so Apollo enrichment prefers business emails."
-        actions={<StatusPill status={pill}>{label}</StatusPill>}
       />
       <PageContent className="flex flex-col gap-6 pb-8">
         <Alert variant="warning" className="rounded-control">
