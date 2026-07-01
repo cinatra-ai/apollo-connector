@@ -3,19 +3,19 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { APOLLO_API_LOG_DIRECTORY } from "./log-directory";
 import type { HostRequiredPackageDefinition } from "@cinatra-ai/sdk-extensions";
-import {
-  getExtensionConnectorConfig,
-  setExtensionConnectorConfig,
-} from "@cinatra-ai/sdk-extensions";
-// Host-coupled services (Nango connection-storage, usage-metric emission) are
-// reached via injected deps `getApolloDeps().nango.*` / `.emitUsage(...)`. Boot
-// wires concrete impls via registerApolloConnector(deps). Connector-config is
-// read/written through the SDK's GENERIC accessor (no per-connector host
-// binding). The connector carries no non-SDK `@cinatra-ai/*` code dependency.
+// Host-coupled services (Nango connection-storage, usage-metric emission,
+// connector-config KV) are ALL reached via injected deps
+// `getApolloDeps().nango.*` / `.emitUsage(...)` /
+// `.readConnectorConfigFromDatabase(...)` / `.writeConnectorConfigToDatabase(...)`.
+// Boot wires concrete impls via registerApolloConnector(deps). Connector-config
+// moved OFF the SDK's generic value accessor (cinatra#782): converting to the
+// schema-config surface pulls this module into the serverEntry import graph,
+// which forbids SDK VALUE imports — so config now flows through the host
+// connector-config service the deps slot binds. SDK imports here are TYPE-ONLY.
+// The connector carries no non-SDK `@cinatra-ai/*` code dependency.
 import { getApolloDeps } from "./deps";
 import { makeApolloLoggingSettings } from "./logging-settings-core";
 
-const APOLLO_PACKAGE_ID = "@cinatra-ai/apollo-connector";
 const APOLLO_CONFIG_KEY = "apollo";
 
 export type ApolloAPISettings = {
@@ -34,15 +34,18 @@ export const apolloAPIConnectionPackage: HostRequiredPackageDefinition = {
   name: "Apollo API Connection",
   slug: "connector-apollo",
   description: "Optional API connection for enriching Ross Index companies and founders with Apollo data.",
-  settingsHref: "/configuration/llm/apollo",
+  // The connector setup route is the canonical settings route — the host now
+  // renders it from the declarative cinatra.configSchema (schema-config surface,
+  // cinatra#782), retiring the bundled-react settings/setup pages.
+  settingsHref: "/connectors/cinatra-ai/apollo-connector/setup",
 };
 
 function readSettings() {
-  return getExtensionConnectorConfig<ApolloAPISettings>(APOLLO_PACKAGE_ID, APOLLO_CONFIG_KEY, {});
+  return getApolloDeps().readConnectorConfigFromDatabase<ApolloAPISettings>(APOLLO_CONFIG_KEY, {});
 }
 
 function writeSettings(value: ApolloAPISettings) {
-  setExtensionConnectorConfig(APOLLO_PACKAGE_ID, APOLLO_CONFIG_KEY, value);
+  getApolloDeps().writeConnectorConfigToDatabase(APOLLO_CONFIG_KEY, value);
 }
 
 function sanitizeLogLabel(value: string) {
@@ -131,15 +134,17 @@ export async function getConfiguredApolloAPIKey(opts?: { forceRefresh?: boolean 
     : null;
 }
 
-// Built on the shared leaf core (./logging-settings-core) so this SDK-backed
-// build site and the serverEntry capability build site can never drift.
-const sdkBackedLoggingSettings = makeApolloLoggingSettings({
-  read: (key, fallback) => getExtensionConnectorConfig(APOLLO_PACKAGE_ID, key, fallback),
-  write: (key, value) => setExtensionConnectorConfig(APOLLO_PACKAGE_ID, key, value),
+// Built on the shared leaf core (./logging-settings-core) so this deps-backed
+// build site and the serverEntry capability build site can never drift — BOTH
+// now address the host connector-config KV row through the injected accessor
+// (cinatra#782 retired the SDK generic value accessor from this graph).
+const depsBackedLoggingSettings = makeApolloLoggingSettings({
+  read: (key, fallback) => getApolloDeps().readConnectorConfigFromDatabase(key, fallback),
+  write: (key, value) => getApolloDeps().writeConnectorConfigToDatabase(key, value),
 });
 
 export function getApolloLoggingSettings() {
-  return sdkBackedLoggingSettings.get();
+  return depsBackedLoggingSettings.get();
 }
 
 export function getApolloAPIStatus() {
@@ -315,7 +320,7 @@ export async function saveApolloAPISettings(input: { apiKey?: string; loggingEna
 }
 
 export async function saveApolloLoggingSettings(enabled: boolean) {
-  await sdkBackedLoggingSettings.save(enabled);
+  await depsBackedLoggingSettings.save(enabled);
 }
 
 export async function clearApolloAPISettings() {

@@ -10,10 +10,6 @@
 // wired into deps in beforeEach (boot does this in register-transport-connectors).
 
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import {
-  setExtensionConnectorConfigStore,
-  _resetExtensionConnectorConfigStoreForTests,
-} from "@cinatra-ai/sdk-extensions";
 import { registerApolloConnector, _resetApolloDepsForTests } from "../deps";
 import {
   syncApolloAPISettingsToNango,
@@ -38,24 +34,16 @@ const deleteConnection = vi.fn(async (..._args: unknown[]): Promise<unknown> => 
 const clearConnectionRecords = vi.fn(async (..._args: unknown[]): Promise<unknown> => null);
 const emitUsage = vi.fn();
 
-// In-memory connector-config store so readSettings/writeSettings work. Seed
-// loggingEnabled:false so writeApolloLogFile (fs) is a no-op under test.
+// In-memory connector-config store so readSettings/writeSettings work. Config
+// now flows through injected deps (cinatra#782) — readConnectorConfigFromDatabase
+// / writeConnectorConfigToDatabase — NOT the SDK generic value accessor. Keyed by
+// the connector-config key only (the host binds a per-connector-scoped service).
+// Seed loggingEnabled:false so writeApolloLogFile (fs) is a no-op under test.
 let CONFIG: Record<string, unknown> = {};
-const storeKey = (packageId: string, key: string) => `${packageId}::${key}`;
 
 beforeEach(() => {
   vi.resetAllMocks();
-  CONFIG = { [storeKey("@cinatra-ai/apollo-connector", "apollo")]: { loggingEnabled: false } };
-  setExtensionConnectorConfigStore({
-    get: <T>(packageId: string, key: string, fallback: T): T =>
-      (CONFIG[storeKey(packageId, key)] as T) ?? fallback,
-    set: (packageId: string, key: string, value: unknown) => {
-      CONFIG[storeKey(packageId, key)] = value;
-    },
-    delete: (packageId: string, key: string) => {
-      delete CONFIG[storeKey(packageId, key)];
-    },
-  });
+  CONFIG = { apollo: { loggingEnabled: false } };
   registerApolloConnector({
     nango: {
       isConfigured,
@@ -70,6 +58,11 @@ beforeEach(() => {
       connectionIds: { apollo: CONNECTION_ID },
     },
     emitUsage,
+    readConnectorConfigFromDatabase: <T,>(configKey: string, fallback: T): T =>
+      (CONFIG[configKey] as T) ?? fallback,
+    writeConnectorConfigToDatabase: (configKey: string, value: unknown) => {
+      CONFIG[configKey] = value;
+    },
   });
   isConfigured.mockReturnValue(true);
 });
@@ -77,7 +70,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   _resetApolloDepsForTests();
-  _resetExtensionConnectorConfigStoreForTests();
 });
 
 describe("syncApolloAPISettingsToNango — readback-safe (no pointer write)", () => {

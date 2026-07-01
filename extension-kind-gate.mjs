@@ -56,6 +56,11 @@
 //       `migrations?: never` + the install-preflight/boot/hot-activate refusal).
 //     - schema-config: a connector declaring uiSurface:"schema-config" must ship
 //       a valid cinatra.configSchema (mirrors classifyConnectorUiSurfaceErrors).
+//       The grammar covers the 7 base field kinds (text/secret/nango-connect/
+//       repeatable-list/status-probe/copyable-credential/named-action) plus the
+//       PR-4 Track-3 additions (select/record-list/advisory/banner). Every kind
+//       is pure DATA: no field carries executable code or HTML; action refs are
+//       BY ID only (host resolves + authorizes them).
 //     - roles: when present, cinatra.roles must be a string[] (the agent-bindings
 //       generator validates uniqueness host-side; shape is enforceable here).
 //
@@ -884,17 +889,70 @@ function validateLicensePresence(pkg, warnings) {
 // scripts/extensions/generate-extension-manifest.mjs validateConfigSchema.
 // ===========================================================================
 const SCHEMA_CONFIG_KEY_RE = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+// The 7 base kinds plus the four PR-4 Track-3 additions (select, record-list,
+// advisory, banner). The host parser (src/lib/extension-schema-config.ts) is
+// extended with the SAME grammar in cinatra#658; this gate is the rules-only
+// standalone port. Every kind is PURE DATA — no field may carry executable code
+// or arbitrary HTML. `adminOnly` (select options) is a host-evaluated VISIBILITY
+// hint declared as data; the connector never evaluates it. record-list/named-
+// action/advisory reference host-registered named actions BY ID only — the host
+// resolves + authorizes them at the `/api/extensions/{installId}/actions/...`
+// endpoint (actor evaluated host-side).
 const SCHEMA_CONFIG_FIELD_KINDS = new Set([
   "text", "secret", "nango-connect", "repeatable-list", "status-probe",
   "copyable-credential", "named-action",
+  "select", "record-list", "advisory", "banner",
+]);
+const SCHEMA_CONFIG_BADGE_VARIANTS = new Set([
+  "outline", "secondary", "destructive", "muted", "success", "warning", "default",
+]);
+const SCHEMA_CONFIG_TONES = new Set([
+  "info", "success", "warning", "destructive",
 ]);
 
+// FAIL-CLOSED key allowlist per field kind. Every field is PURE DATA: an
+// UNKNOWN key (e.g. "html", "onClick", "render", "component", "script") is
+// REJECTED, so an author cannot smuggle an executable/HTML carrier past the
+// grammar even on an otherwise-valid field. Nested objects (select options,
+// record-list badges, banner variants) have their own allowlists below.
+const SCHEMA_CONFIG_ALLOWED_KEYS = {
+  text: new Set(["kind", "key", "label", "placeholder", "required", "description"]),
+  secret: new Set(["kind", "key", "label", "required", "description"]),
+  "nango-connect": new Set(["kind", "label", "providerConfigKey", "description"]),
+  "repeatable-list": new Set(["kind", "key", "label", "itemLabel", "itemFields", "description"]),
+  "status-probe": new Set(["kind", "label", "actionId", "description"]),
+  "copyable-credential": new Set(["kind", "key", "label", "description"]),
+  "named-action": new Set(["kind", "label", "actionId", "confirm", "description"]),
+  select: new Set(["kind", "key", "label", "options", "defaultValue", "description"]),
+  "record-list": new Set([
+    "kind", "label", "listActionId", "deleteActionId", "emptyState",
+    "itemTitleKey", "itemSubtitleKey", "itemBadges", "description",
+  ]),
+  advisory: new Set(["kind", "label", "tone", "probeActionId", "whenReady", "whenNotReady", "description"]),
+  banner: new Set(["kind", "label", "variants"]),
+};
+const SCHEMA_CONFIG_OPTION_KEYS = new Set(["value", "label", "adminOnly"]);
+const SCHEMA_CONFIG_BADGE_KEYS = new Set(["key", "label", "variant"]);
+const SCHEMA_CONFIG_BANNER_VARIANT_KEYS = new Set(["name", "tone", "message"]);
+
+/** Push an error for any key on `raw` not in `allowed` (fail-closed: no
+ *  unexpected/executable carrier keys). */
+function rejectUnknownKeys(raw, allowed, at, errors) {
+  for (const k of Object.keys(raw)) {
+    if (!allowed.has(k)) {
+      errors.push(`${at}: unknown key ${JSON.stringify(k)} — schema-config fields are pure data (no executable/HTML keys)`);
+    }
+  }
+}
+
 function validateConfigSchemaField(kind, raw, at, errors, seenKeys) {
+  const allowedKeys = SCHEMA_CONFIG_ALLOWED_KEYS[kind];
+  if (allowedKeys) rejectUnknownKeys(raw, allowedKeys, at, errors);
   if (!nonEmptyStr(raw.label)) {
     errors.push(`${at}: missing "label"`);
     return;
   }
-  const needsKey = kind === "text" || kind === "secret" || kind === "copyable-credential" || kind === "repeatable-list";
+  const needsKey = kind === "text" || kind === "secret" || kind === "copyable-credential" || kind === "repeatable-list" || kind === "select";
   if (needsKey) {
     if (!nonEmptyStr(raw.key) || !SCHEMA_CONFIG_KEY_RE.test(raw.key)) {
       errors.push(`${at}: invalid or missing "key"`);
@@ -928,12 +986,130 @@ function validateConfigSchemaField(kind, raw, at, errors, seenKeys) {
       validateConfigSchemaField(item.kind, item, itemAt, errors, itemSeen);
     });
   }
+  // ---- select: a dropdown of value/label options. Per-option `adminOnly` is a
+  //      host-evaluated visibility hint (data only); the connector never gates.
+  if (kind === "select") {
+    const options = raw.options;
+    if (!Array.isArray(options) || options.length === 0) {
+      errors.push(`${at}: select requires a non-empty "options"`);
+      return;
+    }
+    const seenValues = new Set();
+    options.forEach((opt, j) => {
+      const optAt = `${at}.options[${j}]`;
+      if (!isObj(opt) || !nonEmptyStr(opt.value) || !nonEmptyStr(opt.label)) {
+        errors.push(`${optAt}: select option must have a non-empty string "value" and "label"`);
+        return;
+      }
+      rejectUnknownKeys(opt, SCHEMA_CONFIG_OPTION_KEYS, optAt, errors);
+      if (seenValues.has(opt.value)) {
+        errors.push(`${optAt}: duplicate option value "${opt.value}"`);
+        return;
+      }
+      seenValues.add(opt.value);
+      if (opt.adminOnly !== undefined && typeof opt.adminOnly !== "boolean") {
+        errors.push(`${optAt}: "adminOnly" must be a boolean when present`);
+      }
+    });
+    if (raw.defaultValue !== undefined && (!nonEmptyStr(raw.defaultValue) || !seenValues.has(raw.defaultValue))) {
+      errors.push(`${at}: "defaultValue" must be one of the declared option values`);
+    }
+  }
+  // ---- record-list: a LIVE list of existing rows sourced from a host list
+  //      action, with per-row badges declared as data + an optional per-row
+  //      delete action. Distinct from create-time repeatable-list. Both actions
+  //      are referenced BY ID only — the host resolves + authorizes them.
+  if (kind === "record-list") {
+    if (!nonEmptyStr(raw.listActionId) || !SCHEMA_CONFIG_KEY_RE.test(raw.listActionId)) {
+      errors.push(`${at}: record-list requires a valid "listActionId"`);
+    }
+    if (raw.deleteActionId !== undefined && (!nonEmptyStr(raw.deleteActionId) || !SCHEMA_CONFIG_KEY_RE.test(raw.deleteActionId))) {
+      errors.push(`${at}: record-list "deleteActionId" must be a valid action id when present`);
+    }
+    if (raw.itemBadges !== undefined) {
+      if (!Array.isArray(raw.itemBadges)) {
+        errors.push(`${at}: record-list "itemBadges" must be an array when present`);
+      } else {
+        raw.itemBadges.forEach((badge, j) => {
+          const badgeAt = `${at}.itemBadges[${j}]`;
+          if (!isObj(badge) || !nonEmptyStr(badge.key) || !nonEmptyStr(badge.label)) {
+            errors.push(`${badgeAt}: record-list badge must have a non-empty string "key" and "label"`);
+            return;
+          }
+          rejectUnknownKeys(badge, SCHEMA_CONFIG_BADGE_KEYS, badgeAt, errors);
+          if (badge.variant !== undefined && !SCHEMA_CONFIG_BADGE_VARIANTS.has(badge.variant)) {
+            errors.push(`${badgeAt}: unknown badge variant ${JSON.stringify(badge.variant)}`);
+          }
+        });
+      }
+    }
+    for (const k of ["itemTitleKey", "itemSubtitleKey"]) {
+      if (raw[k] !== undefined && !nonEmptyStr(raw[k])) {
+        errors.push(`${at}: record-list "${k}" must be a non-empty string when present`);
+      }
+    }
+    if (raw.emptyState !== undefined && !nonEmptyStr(raw.emptyState)) {
+      errors.push(`${at}: record-list "emptyState" must be a non-empty string when present`);
+    }
+  }
+  // ---- advisory: a readiness/warning note. Optional host probe action drives
+  //      the ready/not-ready copy. Pure copy — never executable.
+  if (kind === "advisory") {
+    if (raw.probeActionId !== undefined && (!nonEmptyStr(raw.probeActionId) || !SCHEMA_CONFIG_KEY_RE.test(raw.probeActionId))) {
+      errors.push(`${at}: advisory "probeActionId" must be a valid action id when present`);
+    }
+    if (raw.tone !== undefined && !SCHEMA_CONFIG_TONES.has(raw.tone)) {
+      errors.push(`${at}: advisory "tone" must be one of ${[...SCHEMA_CONFIG_TONES].join(", ")}`);
+    }
+    for (const k of ["whenReady", "whenNotReady"]) {
+      if (raw[k] !== undefined && !nonEmptyStr(raw[k])) {
+        errors.push(`${at}: advisory "${k}" must be a non-empty string when present`);
+      }
+    }
+  }
+  // ---- banner: result-feedback driven by action RESULTS (not search params).
+  //      Declared variants are pure data {name, tone, message}.
+  if (kind === "banner") {
+    const variants = raw.variants;
+    if (!Array.isArray(variants) || variants.length === 0) {
+      errors.push(`${at}: banner requires a non-empty "variants"`);
+      return;
+    }
+    const seenNames = new Set();
+    variants.forEach((variant, j) => {
+      const variantAt = `${at}.variants[${j}]`;
+      if (!isObj(variant) || !nonEmptyStr(variant.name) || !nonEmptyStr(variant.message)) {
+        errors.push(`${variantAt}: banner variant must have a non-empty string "name" and "message"`);
+        return;
+      }
+      rejectUnknownKeys(variant, SCHEMA_CONFIG_BANNER_VARIANT_KEYS, variantAt, errors);
+      if (seenNames.has(variant.name)) {
+        errors.push(`${variantAt}: duplicate banner variant name "${variant.name}"`);
+        return;
+      }
+      seenNames.add(variant.name);
+      if (!SCHEMA_CONFIG_TONES.has(variant.tone)) {
+        errors.push(`${variantAt}: banner variant "tone" must be one of ${[...SCHEMA_CONFIG_TONES].join(", ")}`);
+      }
+    });
+  }
 }
+
+const SCHEMA_CONFIG_ROOT_KEYS = new Set(["title", "description", "fields"]);
 
 export function validateConfigSchema(raw) {
   if (!isObj(raw)) return ["must be an object"];
   if (!Array.isArray(raw.fields) || raw.fields.length === 0) return ["fields must be a non-empty array"];
   const errors = [];
+  // FAIL-CLOSED at the root too: reject any unknown top-level key (e.g. "html",
+  // "script") so the whole grammar — not just fields — is pure data.
+  rejectUnknownKeys(raw, SCHEMA_CONFIG_ROOT_KEYS, "configSchema", errors);
+  if (raw.title !== undefined && !nonEmptyStr(raw.title)) {
+    errors.push(`configSchema: "title" must be a non-empty string when present`);
+  }
+  if (raw.description !== undefined && !nonEmptyStr(raw.description)) {
+    errors.push(`configSchema: "description" must be a non-empty string when present`);
+  }
   const seenKeys = new Set();
   raw.fields.forEach((field, i) => {
     const at = `fields[${i}]`;

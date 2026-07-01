@@ -18,11 +18,25 @@ import type {
   HostConnectorConfigService,
   NangoSystemSurface,
 } from "@cinatra-ai/sdk-extensions";
-import { registerApolloConnector, type ApolloConnectorDeps } from "./deps";
+import { registerApolloConnector, getApolloDeps, type ApolloConnectorDeps } from "./deps";
 import { makeApolloLoggingSettings } from "./logging-settings-core";
 import { APOLLO_API_LOG_DIRECTORY } from "./log-directory";
+import {
+  getApolloAPIStatus,
+  saveApolloAPISettings,
+  clearApolloAPISettings,
+} from "./index";
 
 const PACKAGE_NAME = "@cinatra-ai/apollo-connector";
+
+/** The host-published action-guard service (value, NOT the SDK
+ *  `requireExtensionAction` import — a runtime serverEntry graph rejects SDK
+ *  value imports). `require(packageId, mode)` resolves the actor from the
+ *  request session and enforces the per-install extension access policy,
+ *  failing closed (throw/redirect) on denial. Mirrors anthropic/openai. */
+type HostActionGuard = {
+  require: (packageId: string, mode: "read" | "manage") => Promise<void>;
+};
 
 function hostService<T>(ctx: ExtensionHostContext, capability: string): T {
   const provider = ctx.capabilities.resolveProviders(capability)[0];
@@ -91,6 +105,13 @@ export function register(ctx: ExtensionHostContext): void {
     // Fire-and-forget by the telemetry port contract — matches the previous
     // host binding's `emitUsageEvent` semantics for the apollo source.
     emitUsage: (event) => ctx.telemetry.emitUsage(event),
+    // Connector-config KV, resolved LAZILY through the host connector-config
+    // service (same KV row the retired SDK generic accessor addressed —
+    // cinatra#782). Constructing this object does no resolution; each call
+    // resolves + reads/writes at call time.
+    readConnectorConfigFromDatabase: <T,>(configKey: string, fallback: T): T =>
+      config().read(configKey, fallback),
+    writeConnectorConfigToDatabase: (configKey, value) => config().write(configKey, value),
   };
 
   registerApolloConnector(deps);
@@ -112,6 +133,90 @@ export function register(ctx: ExtensionHostContext): void {
       getLoggingSettings: () => loggingSettings.get(),
       saveLoggingSettings: (enabled: boolean) => loggingSettings.save(enabled),
       logDirectory: APOLLO_API_LOG_DIRECTORY,
+    },
+  });
+
+  // ---- schema-config named actions (cinatra#782) ----
+  //
+  // The declarative setup surface (cinatra.configSchema) renders WITHOUT
+  // shipping React. Its advisory/probe/named-action fields reference these
+  // host-registered actions BY ID; the host dispatches them through the single
+  // endpoint `/api/extensions/{installId}/actions/{actionId}`, which resolves +
+  // authorizes the actor at the "use" tier BEFORE calling the handler. Because
+  // saving/clearing a credential is a MANAGE-tier mutation (the prior
+  // saveApolloConnectionAction gated "manage"), the WRITE handlers re-assert the
+  // manage gate via the host action-guard service — the "use"-tier endpoint check
+  // alone would be a regression. Requires the "ui" host port (declared in
+  // cinatra.requestedHostPorts).
+
+  // Resolve the host's action-guard service LAZILY at action-call time (the same
+  // value the SDK `requireExtensionAction` slot binds), so activation order never
+  // matters and a missing guard FAILS CLOSED. Imported as a VALUE through the
+  // capability registry — NEVER as an SDK value import (a runtime serverEntry
+  // graph rejects those). Mirrors anthropic-connector.
+  const requireManage = async (): Promise<void> => {
+    const provider = ctx.capabilities.resolveProviders(
+      "@cinatra-ai/host:extension-action-guard",
+    )[0];
+    const guard = provider?.impl as HostActionGuard | undefined;
+    if (!guard || typeof guard.require !== "function") {
+      throw new Error(
+        `${PACKAGE_NAME}: host action-guard service is not registered — refusing the ungated action.`,
+      );
+    }
+    await guard.require(PACKAGE_NAME, "manage");
+  };
+
+  // READ/PROBE: whether the connection (Nango) service is configured for API-key
+  // storage — drives the `advisory` field's copy. Boolean data only.
+  ctx.ui.registerAction({
+    id: "connectionServiceReady",
+    handler: async (): Promise<{ ready: boolean }> => ({
+      ready: getApolloDeps().nango.isConfigured(),
+    }),
+  });
+
+  // PROBE: connection status. THROWS when not connected/incomplete so the
+  // status-probe pill renders "error" (any 2xx renders OK); a connected status
+  // returns its detail.
+  ctx.ui.registerAction({
+    id: "connectionStatus",
+    handler: async (): Promise<{ detail: string }> => {
+      const status = getApolloAPIStatus();
+      if (status.status !== "connected") {
+        throw new Error(status.detail);
+      }
+      return { detail: status.detail };
+    },
+  });
+
+  // WRITE (manage-gated): validate the submitted key against Apollo, persist it
+  // to Nango (verified write-then-read-back), and save the cinatra-side pointer.
+  // The schema-config form posts the flat secret input as JSON. A blank apiKey
+  // is treated as ABSENT (no overwrite): saveApolloAPISettings falls back to the
+  // currently-stored key. saveApolloAPISettings throws on an invalid/absent key —
+  // that surfaces as the "error" banner (no partial write; the prior valid
+  // connection survives a failed rotation).
+  ctx.ui.registerAction({
+    id: "saveConnection",
+    handler: async (input: unknown): Promise<{ banner: string }> => {
+      await requireManage();
+      const fields =
+        input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+      const rawApiKey = typeof fields.apiKey === "string" ? fields.apiKey.trim() : "";
+      await saveApolloAPISettings(rawApiKey ? { apiKey: rawApiKey } : {});
+      return { banner: "saved" };
+    },
+  });
+
+  // WRITE (manage-gated): clear the stored connection (scrubs the Nango
+  // credential + cinatra-side pointer rows; preserves the logging preference).
+  ctx.ui.registerAction({
+    id: "clearConnection",
+    handler: async (): Promise<{ banner: string }> => {
+      await requireManage();
+      await clearApolloAPISettings();
+      return { banner: "cleared" };
     },
   });
 }

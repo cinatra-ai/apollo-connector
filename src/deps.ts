@@ -3,15 +3,23 @@
 // Keeps the connector decoupled from sibling extensions and from host-internal
 // services. The host binds concrete impls at boot via
 // `registerApolloConnector(deps)`; runtime functions resolve them via
-// `getApolloDeps()`. Two NON-config host surfaces are delivered here:
+// `getApolloDeps()`. The host surfaces delivered here:
 //   - `nango`     — Nango connection-storage (host-sourced from the
 //                   nango-connector extension) so this connector carries NO
 //                   non-SDK `@cinatra-ai/*` code dependency.
 //   - `emitUsage` — usage-metric emission (host-sourced from metric-usage-api).
+//   - `readConnectorConfigFromDatabase` / `writeConnectorConfigToDatabase` —
+//                   the host connector-config KV accessor.
 //
-// Connector-config read/write is NOT in deps — it flows through the SDK's
-// GENERIC `getExtensionConnectorConfig`/`setExtensionConnectorConfig` accessor
-// (no per-connector host binding) per the extensibility rule.
+// Connector-config read/write moved INTO deps (cinatra#782): converting to the
+// schema-config surface pulls this connector's `index.ts` into the
+// `serverEntry` import graph via `register.ts`, and that graph forbids
+// host-peer VALUE imports (`getExtensionConnectorConfig` /
+// `setExtensionConnectorConfig` are SDK value imports the prod `file://` loader
+// cannot resolve). `register.ts` already resolves the host connector-config
+// service (`@cinatra-ai/host:connector-config`) LAZILY at call time and binds
+// it here — the SAME KV row the SDK generic accessor addressed — so the surface
+// stays SDK-type-only. Mirrors the anthropic/gemini/apify deps pattern.
 //
 // The deps slot is anchored on `globalThis` via a namespaced+versioned Symbol so
 // the boot-time registration and the runtime callers — which live in
@@ -97,6 +105,13 @@ export interface ApolloConnectorDeps {
   nango: ApolloNangoCapability;
   /** Emit a usage-metric event (host-bound from metric-usage-api). */
   emitUsage: (event: ApolloUsageEventInput) => void;
+  /** Read this connector's config KV row (host-bound from
+   *  `@cinatra-ai/host:connector-config`). Replaces the SDK generic
+   *  `getExtensionConnectorConfig` value import (cinatra#782). */
+  readConnectorConfigFromDatabase: <T>(configKey: string, fallback: T) => T;
+  /** Write this connector's config KV row. Replaces the SDK generic
+   *  `setExtensionConnectorConfig` value import (cinatra#782). */
+  writeConnectorConfigToDatabase: (configKey: string, value: unknown) => void;
 }
 
 const APOLLO_DEPS_KEY = Symbol.for("@cinatra-ai/apollo-connector:host-deps/v1");
