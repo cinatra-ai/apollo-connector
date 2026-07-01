@@ -11,13 +11,13 @@
   "exports": {
     ".": "./src/index.ts",
     "./register": "./src/register.ts",
+    "./deps": "./src/deps.ts",
     "./log-directory": "./src/log-directory.ts",
-    "./settings-page": "./src/settings-page.tsx",
-    "./setup-page": "./src/setup-page.tsx",
     "./mcp-handlers": "./src/mcp/handlers.ts",
     "./mcp-module": "./src/mcp/module.ts",
     "./widgets": "./src/widgets/index.ts",
-    "./widgets/manifest": "./src/widgets/manifest.ts"
+    "./widgets/manifest": "./src/widgets/manifest.ts",
+    "./package.json": "./package.json"
   },
   "types": "src/index.ts",
   "dependencies": {
@@ -55,11 +55,72 @@
     "serverEntry": "./register",
     "requestedHostPorts": [
       "capabilities",
-      "telemetry"
+      "telemetry",
+      "ui"
     ],
-    "sdkAbiRange": "^2"
+    "sdkAbiRange": "^2",
+    "uiSurface": "schema-config",
+    "configSchema": {
+      "title": "Apollo",
+      "description": "Connect an Apollo API key to enable optional Ross Index enrichment for companies and founders. The key is stored securely via the connection service.",
+      "fields": [
+        {
+          "kind": "banner",
+          "label": "Result",
+          "variants": [
+            {
+              "name": "saved",
+              "tone": "success",
+              "message": "Apollo connection saved."
+            },
+            {
+              "name": "cleared",
+              "tone": "warning",
+              "message": "Apollo connection cleared."
+            },
+            {
+              "name": "error",
+              "tone": "destructive",
+              "message": "Something went wrong. The Apollo API key was validated live before saving — a rejected key leaves any prior connection unchanged."
+            }
+          ]
+        },
+        {
+          "kind": "advisory",
+          "label": "API key storage",
+          "tone": "info",
+          "probeActionId": "connectionServiceReady",
+          "whenReady": "API keys are stored securely via the connection service.",
+          "whenNotReady": "Configure the connection service first so Apollo API requests can authenticate."
+        },
+        {
+          "kind": "status-probe",
+          "label": "Connection",
+          "actionId": "connectionStatus",
+          "description": "Check whether an Apollo API key is configured and validated."
+        },
+        {
+          "kind": "secret",
+          "key": "apiKey",
+          "label": "Apollo API key",
+          "description": "Create a key in Apollo. Requires at least a non-Free Apollo plan with People API Search enabled (the Ross Index optimization flow needs that endpoint, which the Free plan does not grant). The key is validated live against Apollo before it is saved. Write-only — the stored value is never shown again."
+        },
+        {
+          "kind": "named-action",
+          "label": "Save connection",
+          "actionId": "saveConnection"
+        },
+        {
+          "kind": "named-action",
+          "label": "Clear connection",
+          "actionId": "clearConnection",
+          "confirm": "Clear the stored Apollo connection?"
+        }
+      ]
+    }
   },
   "scripts": {
+    "test": "vitest",
     "lint": "eslint . --no-inline-config"
   }
 }
