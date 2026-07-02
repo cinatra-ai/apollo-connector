@@ -14,7 +14,8 @@ import type { HostRequiredPackageDefinition } from "@cinatra-ai/sdk-extensions";
 // connector-config service the deps slot binds. SDK imports here are TYPE-ONLY.
 // The connector carries no non-SDK `@cinatra-ai/*` code dependency.
 import { getApolloDeps } from "./deps";
-import { makeApolloLoggingSettings } from "./logging-settings-core";
+import { enforceLogRetention } from "./log-retention";
+import { isApolloBodyLoggingEnabled, makeApolloLoggingSettings } from "./logging-settings-core";
 
 const APOLLO_CONFIG_KEY = "apollo";
 
@@ -63,7 +64,9 @@ function buildLogTimestamp() {
 }
 
 function isApolloLoggingEnabled() {
-  return readSettings().loggingEnabled !== false;
+  // OPT-IN (default OFF everywhere): Apollo bodies carry third-party PII, so
+  // capture only when the operator has explicitly enabled it.
+  return isApolloBodyLoggingEnabled(readSettings().loggingEnabled);
 }
 
 function parseJsonResponseBody<T>(rawBody: string) {
@@ -99,6 +102,8 @@ async function writeApolloLogFile(input: {
   const filename = `${buildLogTimestamp()}__${sanitizeLogLabel(input.label)}__${input.kind}.json`;
   const content = typeof input.body === "string" ? { raw: input.body } : input.body;
   await writeFile(path.join(APOLLO_API_LOG_DIRECTORY, filename), JSON.stringify(content, null, 2), "utf8");
+  // Rotate: cap the on-disk capture so logs can't grow unbounded (best-effort).
+  await enforceLogRetention(APOLLO_API_LOG_DIRECTORY);
 }
 
 export function getApolloAPISettings() {
@@ -313,7 +318,9 @@ export async function saveApolloAPISettings(input: { apiKey?: string; loggingEna
     peopleSearchAvailable: peopleSearch.available,
     peopleSearchCheckedAt: new Date().toISOString(),
     peopleSearchDetail: peopleSearch.detail,
-    loggingEnabled: input.loggingEnabled ?? current.loggingEnabled ?? true,
+    // Preserve an explicit preference; leave UNSET otherwise so logging stays
+    // OPT-IN (OFF) by default — never silently persist default-on.
+    loggingEnabled: input.loggingEnabled ?? current.loggingEnabled,
   };
   writeSettings(nextSettings);
   return nextSettings;
@@ -326,7 +333,8 @@ export async function saveApolloLoggingSettings(enabled: boolean) {
 export async function clearApolloAPISettings() {
   const current = readSettings();
   writeSettings({
-    loggingEnabled: current.loggingEnabled ?? true,
+    // Preserve an explicit preference; leave UNSET otherwise (opt-in default).
+    loggingEnabled: current.loggingEnabled,
   });
   const { nango } = getApolloDeps();
   const savedConnection = nango.getPrimarySavedConnection("apollo");

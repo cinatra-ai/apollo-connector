@@ -18,12 +18,22 @@ export type ApolloConfigAccess = {
 
 export const APOLLO_CONFIG_KEY = "apollo";
 
+/**
+ * Apollo people-search request/response bodies carry third-party PII (names,
+ * emails, LinkedIn URLs). On-disk body logging is therefore OPT-IN: it is OFF
+ * unless the operator has EXPLICITLY enabled it — in EVERY environment (no
+ * dev-only default-on). An unset/absent preference is treated as OFF.
+ */
+export function isApolloBodyLoggingEnabled(explicitPreference: boolean | undefined): boolean {
+  return explicitPreference === true;
+}
+
 export function makeApolloLoggingSettings(config: ApolloConfigAccess) {
   return {
     get: () => {
       const settings = config.read<{ loggingEnabled?: boolean }>(APOLLO_CONFIG_KEY, {});
       return {
-        enabled: settings.loggingEnabled !== false,
+        enabled: isApolloBodyLoggingEnabled(settings.loggingEnabled),
         directory: APOLLO_API_LOG_DIRECTORY,
       };
     },
