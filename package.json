@@ -1,6 +1,6 @@
 {
   "name": "@cinatra-ai/apollo-connector",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "files": [
     "src",
     "!src/__tests__"
@@ -50,6 +50,10 @@
   "cinatra": {
     "apiVersion": "cinatra.ai/v1",
     "kind": "connector",
+    "vendor": {
+      "key": "cinatra-ai",
+      "name": "Cinatra"
+    },
     "displayName": "Apollo",
     "dependencies": [],
     "serverEntry": "./register",
