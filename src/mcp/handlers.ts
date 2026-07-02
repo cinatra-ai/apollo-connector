@@ -31,20 +31,6 @@ export const validateKeySchema = z.object({
   apiKey: z.string().optional(),
 });
 
-export const runExecutionJobSchema = z.object({
-  jobId: z.string().min(1),
-  beforeAccountIds: z.array(z.string()),
-  beforeContactIds: z.array(z.string()),
-  queueJobId: z.string().default(""),
-});
-
-export const runOptimizationJobSchema = z.object({
-  jobId: z.string().min(1),
-  prompt: z.string().min(1),
-  requestedAccountCount: z.number().int().positive(),
-  queueJobId: z.string().default(""),
-});
-
 export const peopleSearchSchema = z.object({
   organizationDomains: z.array(z.string()).optional(),
   organizationName: z.string().optional(),
@@ -95,27 +81,6 @@ export function createApolloPrimitiveHandlers() {
       const input = peopleSearchSchema.parse(request.input);
       const agentLabel = deriveAgentLabel(request.actor);
       return searchApolloPeople({ ...input, agentLabel });
-    },
-
-    // The ross-index execution/optimization jobs were archived with the agent
-    // pipeline. These primitives throw a descriptive error (the ross-index job backend was
-    // archived) instead of importing a module that no longer exists.
-    "apollo_jobs_execution_run": async (request: ExtensionPrimitiveRequest<unknown>) => {
-      const _parsed = runExecutionJobSchema.parse(request.input);
-      void _parsed;
-      throw new Error(
-        "apollo_jobs_execution_run is not implemented. The ross-index execution " +
-          "job backend is archived and this primitive is not implemented.",
-      );
-    },
-
-    "apollo_jobs_optimization_run": async (request: ExtensionPrimitiveRequest<unknown>) => {
-      const _parsed = runOptimizationJobSchema.parse(request.input);
-      void _parsed;
-      throw new Error(
-        "apollo_jobs_optimization_run is not implemented. The ross-index optimization " +
-          "job backend is archived and this primitive is not implemented.",
-      );
     },
   } as const;
 }
