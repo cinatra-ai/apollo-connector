@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ExtensionMcpToolServer } from "@cinatra-ai/sdk-extensions";
-import { createApolloPrimitiveHandlers, validateKeySchema, runExecutionJobSchema, runOptimizationJobSchema, peopleSearchSchema } from "./handlers";
+import { createApolloPrimitiveHandlers, validateKeySchema, peopleSearchSchema } from "./handlers";
 
 const TOOL_META: Record<string, { description: string; inputSchema: z.ZodTypeAny }> = {
   "apollo_status": {
@@ -22,14 +22,6 @@ const TOOL_META: Record<string, { description: string; inputSchema: z.ZodTypeAny
   "apollo_people_search": {
     description: "Contact enrichment and email lookup via Apollo. Search for people at a company by domain or name and get back verified emails, names, titles, and LinkedIn URLs — without saving to the workspace. Use this as the enrichment step in any workflow that needs to find or verify professional email addresses for a list of contacts. organizationDomains accepts full URLs (e.g. [\"https://example.com\"]) OR bare domains (e.g. [\"example.com\"]) — the tool normalizes them automatically, so you can pass the same targetWebsite URL used for scraping. organizationName is optional when organizationDomains is provided. Optionally add personTitles (e.g. [\"CEO\", \"CTO\"]) to narrow results.",
     inputSchema: peopleSearchSchema,
-  },
-  "apollo_jobs_execution_run": {
-    description: "Worker: execute a queued Ross Index import job.",
-    inputSchema: runExecutionJobSchema,
-  },
-  "apollo_jobs_optimization_run": {
-    description: "Worker: execute a queued Ross Index optimization job.",
-    inputSchema: runOptimizationJobSchema,
   },
 };
 
