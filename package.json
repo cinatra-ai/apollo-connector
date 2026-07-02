@@ -121,7 +121,8 @@
           "confirm": "Clear the stored Apollo connection?"
         }
       ]
-    }
+    },
+    "consumes": []
   },
   "scripts": {
     "test": "vitest",
