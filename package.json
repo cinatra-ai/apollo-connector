@@ -63,6 +63,7 @@
       "ui"
     ],
     "sdkAbiRange": "^2",
+    "providerConfigKey": "cinatra-apollo",
     "uiSurface": "schema-config",
     "configSchema": {
       "title": "Apollo",
