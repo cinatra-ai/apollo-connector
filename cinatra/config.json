@@ -1,4 +1,4 @@
 {
   "formatVersion": 1,
-  "access": { "scope": { "default": "admin" } }
+  "access": { "scope": { "default": "workspace" } }
 }
