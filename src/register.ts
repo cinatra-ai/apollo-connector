@@ -20,7 +20,7 @@ import type {
 } from "@cinatra-ai/sdk-extensions";
 import { registerApolloConnector, getApolloDeps, type ApolloConnectorDeps } from "./deps";
 import { makeApolloLoggingSettings } from "./logging-settings-core";
-import { APOLLO_API_LOG_DIRECTORY } from "./log-directory";
+import { APOLLO_LOG_CAPTURE_CHANNEL } from "./log-capture-channel";
 import {
   getApolloAPIStatus,
   saveApolloAPISettings,
@@ -112,6 +112,14 @@ export function register(ctx: ExtensionHostContext): void {
     readConnectorConfigFromDatabase: <T,>(configKey: string, fallback: T): T =>
       config().read(configKey, fallback),
     writeConnectorConfigToDatabase: (configKey, value) => config().write(configKey, value),
+    // Host-owned capture (cinatra#981) — `ctx.logger.capture`/`captureDirectory`
+    // are ADDITIVE OPTIONAL minimum-minor methods (>=2.3.0); feature-detected so
+    // this connector still activates (logging degrades to a no-op) against an
+    // older host pinned below the 2.3.0 floor.
+    captureLog: async (channel, entry) => {
+      await ctx.logger.capture?.(channel, entry);
+    },
+    captureLogDirectory: (channel) => ctx.logger.captureDirectory?.(channel) ?? "",
   };
 
   registerApolloConnector(deps);
@@ -125,6 +133,7 @@ export function register(ctx: ExtensionHostContext): void {
   const loggingSettings = makeApolloLoggingSettings({
     read: (key, fallback) => config().read(key, fallback),
     write: (key, value) => config().write(key, value),
+    captureDirectory: (channel) => ctx.logger.captureDirectory?.(channel) ?? "",
   });
   ctx.capabilities.registerProvider("llm-provider-surface", {
     packageName: PACKAGE_NAME,
@@ -132,7 +141,8 @@ export function register(ctx: ExtensionHostContext): void {
       providerId: "apollo",
       getLoggingSettings: () => loggingSettings.get(),
       saveLoggingSettings: (enabled: boolean) => loggingSettings.save(enabled),
-      logDirectory: APOLLO_API_LOG_DIRECTORY,
+      // Host-resolved (cinatra#981) — was a connector-owned `node:fs` path.
+      logDirectory: ctx.logger.captureDirectory?.(APOLLO_LOG_CAPTURE_CHANNEL) ?? "",
     },
   });
 
