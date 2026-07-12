@@ -60,7 +60,10 @@
 //       repeatable-list/status-probe/copyable-credential/named-action) plus the
 //       PR-4 Track-3 additions (select/record-list/advisory/banner). Every kind
 //       is pure DATA: no field carries executable code or HTML; action refs are
-//       BY ID only (host resolves + authorizes them).
+//       BY ID only (host resolves + authorizes them). An optional root `tabs`
+//       array (cinatra#1102 tab/section grouping — design spec: app-connectors
+//       §II) groups fields into named tabs {id,label,fields}; field keys stay
+//       unique across the base `fields` AND every tab.
 //     - roles: when present, cinatra.roles must be a string[] (the agent-bindings
 //       generator validates uniqueness host-side; shape is enforceable here).
 //
@@ -1095,7 +1098,67 @@ function validateConfigSchemaField(kind, raw, at, errors, seenKeys) {
   }
 }
 
-const SCHEMA_CONFIG_ROOT_KEYS = new Set(["title", "description", "fields"]);
+// cinatra#1102 tab/section grouping primitive (design spec: app-connectors §II
+// — a tabbed setup page, reserved Help tab always last). Mirrors the SAME
+// vocabulary the host parser added to src/lib/extension-schema-config.ts: a
+// root `tabs` key, each entry carrying ONLY {id,label,fields} (fail-closed, no
+// executable/HTML carrier), field keys unique across the base `fields` AND
+// every tab (one flat submit namespace). The reserved id below matches the
+// host's HELP_TAB_ID; this standalone gate validates SHAPE only (like the host
+// parser it mirrors, it does not require Help to be declared last — the host
+// normalizes the render order silently either way).
+const SCHEMA_CONFIG_TAB_KEYS = new Set(["id", "label", "fields"]);
+export const SCHEMA_CONFIG_HELP_TAB_ID = "help";
+
+function validateConfigSchemaTabs(rawTabs, errors, seenKeys) {
+  if (!Array.isArray(rawTabs)) {
+    errors.push(`configSchema.tabs must be an array`);
+    return;
+  }
+  const seenTabIds = new Set();
+  rawTabs.forEach((tab, i) => {
+    const at = `tabs[${i}]`;
+    if (!isObj(tab)) {
+      errors.push(`${at}: must be an object`);
+      return;
+    }
+    rejectUnknownKeys(tab, SCHEMA_CONFIG_TAB_KEYS, at, errors);
+    if (!nonEmptyStr(tab.id) || !SCHEMA_CONFIG_KEY_RE.test(tab.id)) {
+      errors.push(`${at}: invalid or missing "id"`);
+      return;
+    }
+    if (seenTabIds.has(tab.id)) {
+      errors.push(`${at}: duplicate tab id ${JSON.stringify(tab.id)}`);
+      return;
+    }
+    seenTabIds.add(tab.id);
+    if (!nonEmptyStr(tab.label)) {
+      errors.push(`${at}: missing "label"`);
+      return;
+    }
+    if (!Array.isArray(tab.fields) || tab.fields.length === 0) {
+      errors.push(`${at}: tab requires a non-empty "fields" array`);
+      return;
+    }
+    // Threaded through the SAME seenKeys set as the base fields — a keyed field
+    // (text/secret/.../free-list) must be unique across the whole surface, not
+    // just within its own tab (mirrors the host parser's shared namespace).
+    tab.fields.forEach((field, j) => {
+      const fieldAt = `${at}.fields[${j}]`;
+      if (!isObj(field)) {
+        errors.push(`${fieldAt}: must be an object`);
+        return;
+      }
+      if (typeof field.kind !== "string" || !SCHEMA_CONFIG_FIELD_KINDS.has(field.kind)) {
+        errors.push(`${fieldAt}: unknown field kind ${JSON.stringify(field.kind)}`);
+        return;
+      }
+      validateConfigSchemaField(field.kind, field, fieldAt, errors, seenKeys);
+    });
+  });
+}
+
+const SCHEMA_CONFIG_ROOT_KEYS = new Set(["title", "description", "fields", "tabs"]);
 
 export function validateConfigSchema(raw) {
   if (!isObj(raw)) return ["must be an object"];
@@ -1123,6 +1186,9 @@ export function validateConfigSchema(raw) {
     }
     validateConfigSchemaField(field.kind, field, at, errors, seenKeys);
   });
+  if (raw.tabs !== undefined) {
+    validateConfigSchemaTabs(raw.tabs, errors, seenKeys);
+  }
   return errors;
 }
 

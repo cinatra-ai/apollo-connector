@@ -176,17 +176,23 @@ export function register(ctx: ExtensionHostContext): void {
     }),
   });
 
-  // PROBE: connection status. THROWS when not connected/incomplete so the
-  // status-probe pill renders "error" (any 2xx renders OK); a connected status
-  // returns its detail.
+  // PROBE: connection status for the `status-probe` field (Setup tab) AND the
+  // `advisory` field (Help tab, issue #46). THROWS when not connected/incomplete
+  // so the status-probe pill renders "error" (any 2xx renders OK — it never
+  // reads the result body, so the added `ready` key is a pure additive
+  // widening and cannot regress that pill); a connected status returns its
+  // detail plus `ready: true`, which the `advisory` field's renderer reads to
+  // pick `whenReady` vs `whenNotReady` copy — the SAME probe drives both
+  // surfaces without a second registered action (mirrors the openai-connector
+  // precedent, cinatra-ai/openai-connector#57/#58).
   ctx.ui.registerAction({
     id: "connectionStatus",
-    handler: async (): Promise<{ detail: string }> => {
+    handler: async (): Promise<{ detail: string; ready: true }> => {
       const status = getApolloAPIStatus();
       if (status.status !== "connected") {
         throw new Error(status.detail);
       }
-      return { detail: status.detail };
+      return { detail: status.detail, ready: true };
     },
   });
 

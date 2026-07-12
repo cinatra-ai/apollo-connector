@@ -124,12 +124,13 @@ describe("apollo-connector register(ctx) — schema-config named actions", () =>
     await expect(actionById(uiActions, "connectionStatus").handler({})).rejects.toThrow(/Add a key/);
   });
 
-  it("connectionStatus returns the detail when connected", async () => {
+  it("connectionStatus returns the detail + ready:true when connected (ready feeds the Help-tab advisory, #46)", async () => {
     mocks.getApolloAPIStatus.mockReturnValueOnce({ status: "connected", detail: "Connected as Cinatra Apollo." });
     const { ctx, uiActions } = makeCtx(baseServices());
     register(ctx);
     await expect(actionById(uiActions, "connectionStatus").handler({})).resolves.toEqual({
       detail: "Connected as Cinatra Apollo.",
+      ready: true,
     });
   });
 
