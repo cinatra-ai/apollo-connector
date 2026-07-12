@@ -122,6 +122,23 @@
           "actionId": "clearConnection",
           "confirm": "Clear the stored Apollo connection?"
         }
+      ],
+      "tabs": [
+        {
+          "id": "help",
+          "label": "Help",
+          "fields": [
+            {
+              "kind": "advisory",
+              "label": "Apollo setup",
+              "tone": "info",
+              "probeActionId": "connectionStatus",
+              "whenReady": "Apollo is connected. The stored API key enables optional Ross Index enrichment for companies and founders. To rotate the key, paste a new one on the Setup tab and click Save connection — the new key is validated live before it replaces the old one. Use Clear connection to remove the stored key.",
+              "whenNotReady": "Not connected yet. Create a key in Apollo, then paste it into the API key field on the Setup tab and click Save connection. Requires at least a non-Free Apollo plan with People API Search enabled — the Ross Index optimization flow needs that endpoint, which the Free plan does not grant. The key is validated live against Apollo before it is saved and is write-only afterward — the stored value is never shown again.",
+              "description": "Read-only setup guidance — nothing on this tab is saved."
+            }
+          ]
+        }
       ]
     },
     "consumes": []
