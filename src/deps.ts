@@ -112,6 +112,14 @@ export interface ApolloConnectorDeps {
   /** Write this connector's config KV row. Replaces the SDK generic
    *  `setExtensionConnectorConfig` value import (cinatra#782). */
   writeConnectorConfigToDatabase: (configKey: string, value: unknown) => void;
+  /** Host-owned request/response log capture — `ctx.logger.capture` (cinatra#981).
+   *  Storage/rotation is entirely host-side; this connector still owns the
+   *  opt-in-everywhere gate (`isApolloBodyLoggingEnabled` — third-party PII,
+   *  OFF unless explicitly enabled, in EVERY environment). */
+  captureLog: (channel: string, entry: { label: string; kind: "request" | "response"; body: unknown }) => Promise<void>;
+  /** The host-resolved on-disk directory `captureLog` entries land in — a
+   *  read-only display value for the telemetry page (cinatra#981). */
+  captureLogDirectory: (channel: string) => string;
 }
 
 const APOLLO_DEPS_KEY = Symbol.for("@cinatra-ai/apollo-connector:host-deps/v1");

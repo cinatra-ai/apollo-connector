@@ -63,6 +63,8 @@ beforeEach(() => {
     writeConnectorConfigToDatabase: (configKey: string, value: unknown) => {
       CONFIG[configKey] = value;
     },
+    captureLog: async () => {},
+    captureLogDirectory: () => "/host-owned/apollo-api",
   });
   isConfigured.mockReturnValue(true);
 });
