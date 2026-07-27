@@ -45,7 +45,7 @@
   },
   "devDependencies": {
     "@typescript-eslint/parser": "8.65.0",
-    "eslint": "10.7.0",
+    "eslint": "10.8.0",
     "typescript": "5.9.3"
   },
   "cinatra": {
