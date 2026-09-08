@@ -66,6 +66,10 @@ export function register(ctx: ExtensionHostContext): void {
     return surface;
   };
 
+  // One diagnostic per activation when the host has no capture port (below),
+  // never one line per dropped request.
+  let captureUnavailableWarned = false;
+
   const deps: ApolloConnectorDeps = {
     // Members delegate to the nango-system surface at CALL time (key maps are
     // getters for the same reason). Inputs are cast at this boundary where the
@@ -116,8 +120,27 @@ export function register(ctx: ExtensionHostContext): void {
     // are ADDITIVE OPTIONAL minimum-minor methods (>=2.3.0); feature-detected so
     // this connector still activates (logging degrades to a no-op) against an
     // older host pinned below the 2.3.0 floor.
+    //
+    // A silent no-op would be a trap: the operator has EXPLICITLY opted body
+    // logging in (`isApolloBodyLoggingEnabled`), the settings surface reads the
+    // preference back as enabled, and every entry would be discarded without a
+    // word. Degrading stays the behaviour (activation must not fail on an older
+    // host), but the connector SAYS SO once per activation through the ambient
+    // logger, naming the channel that is being dropped.
     captureLog: async (channel, entry) => {
-      await ctx.logger.capture?.(channel, entry);
+      const capture = ctx.logger.capture;
+      if (typeof capture !== "function") {
+        if (!captureUnavailableWarned) {
+          captureUnavailableWarned = true;
+          ctx.logger.warn(
+            `${PACKAGE_NAME}: body logging is enabled but this host provides no ` +
+              `logger.capture port (SDK extensions ABI below 2.3.0) — ` +
+              `request/response entries for the "${channel}" channel are discarded.`,
+          );
+        }
+        return;
+      }
+      await capture.call(ctx.logger, channel, entry);
     },
     captureLogDirectory: (channel) => ctx.logger.captureDirectory?.(channel) ?? "",
   };

@@ -13,7 +13,7 @@
     ".": "./src/index.ts",
     "./register": "./src/register.ts",
     "./deps": "./src/deps.ts",
-    "./log-directory": "./src/log-directory.ts",
+    "./log-capture-channel": "./src/log-capture-channel.ts",
     "./mcp-handlers": "./src/mcp/handlers.ts",
     "./mcp-module": "./src/mcp/module.ts",
     "./widgets": "./src/widgets/index.ts",
