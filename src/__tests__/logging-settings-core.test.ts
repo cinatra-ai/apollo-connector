@@ -32,6 +32,7 @@ describe("makeApolloLoggingSettings().get()", () => {
       write: (key: string, value: unknown) => {
         store[key] = value;
       },
+      captureDirectory: (channel: string) => `/host-owned/${channel}`,
     });
   }
 
@@ -45,5 +46,9 @@ describe("makeApolloLoggingSettings().get()", () => {
 
   it("reports enabled only after an explicit opt-in", () => {
     expect(withStore({ [APOLLO_CONFIG_KEY]: { loggingEnabled: true } }).get().enabled).toBe(true);
+  });
+
+  it("directory is host-resolved via captureDirectory (cinatra#981) — not a raw fs path", () => {
+    expect(withStore({}).get().directory).toBe("/host-owned/apollo-api");
   });
 });

@@ -20,7 +20,7 @@ import type {
 } from "@cinatra-ai/sdk-extensions";
 import { registerApolloConnector, getApolloDeps, type ApolloConnectorDeps } from "./deps";
 import { makeApolloLoggingSettings } from "./logging-settings-core";
-import { APOLLO_API_LOG_DIRECTORY } from "./log-directory";
+import { APOLLO_LOG_CAPTURE_CHANNEL } from "./log-capture-channel";
 import {
   getApolloAPIStatus,
   saveApolloAPISettings,
@@ -65,6 +65,10 @@ export function register(ctx: ExtensionHostContext): void {
     }
     return surface;
   };
+
+  // One diagnostic per activation when the host has no capture port (below),
+  // never one line per dropped request.
+  let captureUnavailableWarned = false;
 
   const deps: ApolloConnectorDeps = {
     // Members delegate to the nango-system surface at CALL time (key maps are
@@ -112,6 +116,33 @@ export function register(ctx: ExtensionHostContext): void {
     readConnectorConfigFromDatabase: <T,>(configKey: string, fallback: T): T =>
       config().read(configKey, fallback),
     writeConnectorConfigToDatabase: (configKey, value) => config().write(configKey, value),
+    // Host-owned capture (cinatra#981) — `ctx.logger.capture`/`captureDirectory`
+    // are ADDITIVE OPTIONAL minimum-minor methods (>=2.3.0); feature-detected so
+    // this connector still activates (logging degrades to a no-op) against an
+    // older host pinned below the 2.3.0 floor.
+    //
+    // A silent no-op would be a trap: the operator has EXPLICITLY opted body
+    // logging in (`isApolloBodyLoggingEnabled`), the settings surface reads the
+    // preference back as enabled, and every entry would be discarded without a
+    // word. Degrading stays the behaviour (activation must not fail on an older
+    // host), but the connector SAYS SO once per activation through the ambient
+    // logger, naming the channel that is being dropped.
+    captureLog: async (channel, entry) => {
+      const capture = ctx.logger.capture;
+      if (typeof capture !== "function") {
+        if (!captureUnavailableWarned) {
+          captureUnavailableWarned = true;
+          ctx.logger.warn(
+            `${PACKAGE_NAME}: body logging is enabled but this host provides no ` +
+              `logger.capture port (SDK extensions ABI below 2.3.0) — ` +
+              `request/response entries for the "${channel}" channel are discarded.`,
+          );
+        }
+        return;
+      }
+      await capture.call(ctx.logger, channel, entry);
+    },
+    captureLogDirectory: (channel) => ctx.logger.captureDirectory?.(channel) ?? "",
   };
 
   registerApolloConnector(deps);
@@ -125,6 +156,7 @@ export function register(ctx: ExtensionHostContext): void {
   const loggingSettings = makeApolloLoggingSettings({
     read: (key, fallback) => config().read(key, fallback),
     write: (key, value) => config().write(key, value),
+    captureDirectory: (channel) => ctx.logger.captureDirectory?.(channel) ?? "",
   });
   ctx.capabilities.registerProvider("llm-provider-surface", {
     packageName: PACKAGE_NAME,
@@ -132,7 +164,8 @@ export function register(ctx: ExtensionHostContext): void {
       providerId: "apollo",
       getLoggingSettings: () => loggingSettings.get(),
       saveLoggingSettings: (enabled: boolean) => loggingSettings.save(enabled),
-      logDirectory: APOLLO_API_LOG_DIRECTORY,
+      // Host-resolved (cinatra#981) — was a connector-owned `node:fs` path.
+      logDirectory: ctx.logger.captureDirectory?.(APOLLO_LOG_CAPTURE_CHANNEL) ?? "",
     },
   });
 

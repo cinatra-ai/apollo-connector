@@ -1,12 +1,11 @@
-import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
-import { APOLLO_API_LOG_DIRECTORY } from "./log-directory";
+import { APOLLO_LOG_CAPTURE_CHANNEL } from "./log-capture-channel";
 import type { HostRequiredPackageDefinition } from "@cinatra-ai/sdk-extensions";
 // Host-coupled services (Nango connection-storage, usage-metric emission,
-// connector-config KV) are ALL reached via injected deps
+// connector-config KV, log capture) are ALL reached via injected deps
 // `getApolloDeps().nango.*` / `.emitUsage(...)` /
-// `.readConnectorConfigFromDatabase(...)` / `.writeConnectorConfigToDatabase(...)`.
+// `.readConnectorConfigFromDatabase(...)` / `.writeConnectorConfigToDatabase(...)` /
+// `.captureLog(...)` / `.captureLogDirectory(...)`.
 // Boot wires concrete impls via registerApolloConnector(deps). Connector-config
 // moved OFF the SDK's generic value accessor (cinatra#782): converting to the
 // schema-config surface pulls this module into the serverEntry import graph,
@@ -14,7 +13,6 @@ import type { HostRequiredPackageDefinition } from "@cinatra-ai/sdk-extensions";
 // connector-config service the deps slot binds. SDK imports here are TYPE-ONLY.
 // The connector carries no non-SDK `@cinatra-ai/*` code dependency.
 import { getApolloDeps } from "./deps";
-import { enforceLogRetention } from "./log-retention";
 import { isApolloBodyLoggingEnabled, makeApolloLoggingSettings } from "./logging-settings-core";
 
 const APOLLO_CONFIG_KEY = "apollo";
@@ -28,7 +26,7 @@ export type ApolloAPISettings = {
   loggingEnabled?: boolean;
 };
 
-export { APOLLO_API_LOG_DIRECTORY } from "./log-directory";
+export { APOLLO_LOG_CAPTURE_CHANNEL } from "./log-capture-channel";
 
 export const apolloAPIConnectionPackage: HostRequiredPackageDefinition = {
   packageId: "@cinatra-ai/apollo-connector",
@@ -47,20 +45,6 @@ function readSettings() {
 
 function writeSettings(value: ApolloAPISettings) {
   getApolloDeps().writeConnectorConfigToDatabase(APOLLO_CONFIG_KEY, value);
-}
-
-function sanitizeLogLabel(value: string) {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 80) || "apollo-call"
-  );
-}
-
-function buildLogTimestamp() {
-  return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
 function isApolloLoggingEnabled() {
@@ -89,6 +73,14 @@ function parseJsonResponseBody<T>(rawBody: string) {
   return null;
 }
 
+/**
+ * Best-effort request/response capture through the HOST-owned
+ * `ctx.logger.capture` port (cinatra#981) — storage, directory placement, and
+ * rotation/retention are entirely host-side now (see
+ * `@cinatra-ai/sdk-extensions` `HostLoggerPort.capture`). This connector keeps
+ * ONLY the domain policy the host cannot own: the opt-in-everywhere gate
+ * (`isApolloLoggingEnabled` — third-party PII, OFF unless explicitly enabled).
+ */
 async function writeApolloLogFile(input: {
   label: string;
   kind: "request" | "response";
@@ -98,12 +90,12 @@ async function writeApolloLogFile(input: {
     return;
   }
 
-  await mkdir(APOLLO_API_LOG_DIRECTORY, { recursive: true });
-  const filename = `${buildLogTimestamp()}__${sanitizeLogLabel(input.label)}__${input.kind}.json`;
   const content = typeof input.body === "string" ? { raw: input.body } : input.body;
-  await writeFile(path.join(APOLLO_API_LOG_DIRECTORY, filename), JSON.stringify(content, null, 2), "utf8");
-  // Rotate: cap the on-disk capture so logs can't grow unbounded (best-effort).
-  await enforceLogRetention(APOLLO_API_LOG_DIRECTORY);
+  await getApolloDeps().captureLog(APOLLO_LOG_CAPTURE_CHANNEL, {
+    label: input.label,
+    kind: input.kind,
+    body: content,
+  });
 }
 
 export function getApolloAPISettings() {
@@ -146,6 +138,7 @@ export async function getConfiguredApolloAPIKey(opts?: { forceRefresh?: boolean 
 const depsBackedLoggingSettings = makeApolloLoggingSettings({
   read: (key, fallback) => getApolloDeps().readConnectorConfigFromDatabase(key, fallback),
   write: (key, value) => getApolloDeps().writeConnectorConfigToDatabase(key, value),
+  captureDirectory: (channel) => getApolloDeps().captureLogDirectory(channel),
 });
 
 export function getApolloLoggingSettings() {

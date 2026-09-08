@@ -8,12 +8,16 @@
 // Both back ends address the SAME host KV row (key "apollo"), so the two
 // build sites can never drift on the settings shape.
 
-import { APOLLO_API_LOG_DIRECTORY } from "./log-directory";
+import { APOLLO_LOG_CAPTURE_CHANNEL } from "./log-capture-channel";
 
 /** The connector-config access both build sites inject (key-scoped KV). */
 export type ApolloConfigAccess = {
   read<T>(key: string, fallback: T): T;
   write(key: string, value: unknown): void;
+  /** The host-resolved on-disk directory `ctx.logger.capture` entries land in
+   *  (cinatra#981) — a read-only display value; neither build site owns a raw
+   *  filesystem path anymore. */
+  captureDirectory(channel: string): string;
 };
 
 export const APOLLO_CONFIG_KEY = "apollo";
@@ -34,7 +38,7 @@ export function makeApolloLoggingSettings(config: ApolloConfigAccess) {
       const settings = config.read<{ loggingEnabled?: boolean }>(APOLLO_CONFIG_KEY, {});
       return {
         enabled: isApolloBodyLoggingEnabled(settings.loggingEnabled),
-        directory: APOLLO_API_LOG_DIRECTORY,
+        directory: config.captureDirectory(APOLLO_LOG_CAPTURE_CHANNEL),
       };
     },
     save: async (enabled: boolean) => {
