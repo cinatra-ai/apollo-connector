@@ -1,0 +1,26 @@
+name: extension-conformance-gate
+
+# This workflow runs the application's extension conformance checker over this
+# connector on every pull request and on every push to main. The checker reads
+# the connector's package and source and fails when they break a rule for
+# extensions, for example when a connector claims an artifact type, registers
+# an artifact display or imports outside the extension SDK.
+#
+# Both pins below name the same commit of the application: the reference of the
+# reusable workflow and its ref input must stay equal. A maintained rollout tool
+# writes this file and advances both pins together.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  extension-conformance-gate:
+    uses: cinatra-ai/cinatra/.github/workflows/extension-conformance-gate-reusable.yml@2cf48c6cfaabc6ba297de99d8fb495da6b5732f4 # v0.1.8
+    with:
+      ref: 2cf48c6cfaabc6ba297de99d8fb495da6b5732f4
+      enforce: true
