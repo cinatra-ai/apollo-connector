@@ -2,16 +2,16 @@
 
 import { useImperativeHandle, useState } from "react";
 import { WidgetShell, type WidgetProps } from "@cinatra-ai/sdk-ui";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
 import {
+  Input,
+  Label,
+  PaginatedTable,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-} from "../components/ui/table";
-import { PaginatedTable } from "../components/ui/paginated-table";
+} from "@cinatra-ai/design-primitives";
 
 type Person = {
   name: string;
