@@ -1,0 +1,137 @@
+{
+  "$comment": "Named, versioned machine-verification suite for cinatra-ai/apollo-connector — the gate-arm half of the truthful verification-record model (the Truthful Attribution protocol §4). The truthful-attribution-gate reads THIS file at the merged SHA (authoritative, no TOCTOU) when a merge record carries a Gate-suite arm: the cited suiteId@version must equal this file's, the Accountable trailer must equal accountable{github,name,email}, and every requiredContexts entry must have concluded success on the reviewed head. requiredContexts names every check this repository's own workflows run on each pull request into main: each reusable gate with the reusable workflow it calls, the sha this repository's own caller pins for it, that caller's path and the events it runs on; each job of these workflows that calls no reusable workflow by its context alone, with no workflow/pinned pair; and the truthful-attribution-gate context, whose engine pin lives in its caller's uses: line (itself a high-risk path). A change that moves one of these caller pins moves the matching pinned value here in the same commit and bumps the version. highRiskPaths EXTENDS the central cinatra-ai/ci defaults (the gate verifies the effective set is a superset). High-risk changes (this file is itself one — see **/gate-suite.json) require the HUMAN arm at tier=maintainer or the maintainer's standing authority; the gate arm alone is rejected, so this file's birth never rests on a self-blessing gate arm. lastAuditedAt + auditEvidence are the §4 monthly-audit record; the Accountable engineer re-audits monthly and bumps BOTH coupled in one commit (the gate warns >35d, fails the gate arm >65d; the human arm is always still available).",
+  "suiteId": "apollo-connector-core",
+  "version": "2026.09.1",
+  "accountable": {
+    "name": "Sandro Groganz",
+    "email": "sandro@cinatra.ai",
+    "github": "groganz"
+  },
+  "requiredContexts": [
+    {
+      "context": "actions-pinned-gate / actions-pinned-gate",
+      "workflow": "cinatra-ai/ci/.github/workflows/actions-pinned-gate.yml",
+      "pinned": "4c903fe9ca71ad47752a2bc92b72893e5f7c9814",
+      "callerPath": ".github/workflows/actions-pinned-gate.yml",
+      "allowedEvents": [
+        "pull_request",
+        "push"
+      ]
+    },
+    {
+      "context": "build"
+    },
+    {
+      "context": "kind-gates"
+    },
+    {
+      "context": "meta-commentary-gate / meta-commentary-gate",
+      "workflow": "cinatra-ai/ci/.github/workflows/meta-commentary-gate.yml",
+      "pinned": "533a12a64a596e6ce5df3887e0ebbad5a7d6b953",
+      "callerPath": ".github/workflows/docs-meta-commentary.yml",
+      "allowedEvents": [
+        "pull_request",
+        "push"
+      ]
+    },
+    {
+      "context": "extension-conformance-gate / extension-conformance-gate",
+      "workflow": "cinatra-ai/cinatra/.github/workflows/extension-conformance-gate-reusable.yml",
+      "pinned": "2cf48c6cfaabc6ba297de99d8fb495da6b5732f4",
+      "callerPath": ".github/workflows/extension-conformance-gate.yml",
+      "allowedEvents": [
+        "pull_request",
+        "push"
+      ]
+    },
+    {
+      "context": "gitignore-gate / gitignore-gate",
+      "workflow": "cinatra-ai/ci/.github/workflows/gitignore-gate.yml",
+      "pinned": "4c903fe9ca71ad47752a2bc92b72893e5f7c9814",
+      "callerPath": ".github/workflows/gitignore-gate.yml",
+      "allowedEvents": [
+        "pull_request",
+        "push"
+      ]
+    },
+    {
+      "context": "secret-scan-gate / secret-scan-gate",
+      "workflow": "cinatra-ai/ci/.github/workflows/secret-scan-gate.yml",
+      "pinned": "a8677e50ba02fcb11929e94c70fb5ba96a8ea3ae",
+      "callerPath": ".github/workflows/secret-scan-gate.yml",
+      "allowedEvents": [
+        "pull_request",
+        "push"
+      ]
+    },
+    {
+      "context": "source-leak-gate / source-leak-gate",
+      "workflow": "cinatra-ai/ci/.github/workflows/source-leak-gate.yml",
+      "pinned": "00ac7b92c2ca1ca291a1824d743cbd00c4a3e48e",
+      "callerPath": ".github/workflows/source-leak-gate.yml",
+      "allowedEvents": [
+        "pull_request",
+        "push"
+      ]
+    },
+    {
+      "context": "ui-design-system-gate / ui-design-system-gate",
+      "workflow": "cinatra-ai/ci/.github/workflows/ui-design-system-gate.yml",
+      "pinned": "83ca29ef8df0a33d11ba02568c61f2fdc56a3eaf",
+      "callerPath": ".github/workflows/ui-design-system-gate.yml",
+      "allowedEvents": [
+        "pull_request",
+        "push"
+      ]
+    },
+    {
+      "context": "truthful-attribution-gate / truthful-attribution-gate",
+      "workflow": "cinatra-ai/ci/.github/workflows/truthful-attribution-gate.yml",
+      "pinned": "1e40675e1642dcc32d195f27b3deb285b4d3d6fc",
+      "callerPath": ".github/workflows/truthful-attribution-gate.yml",
+      "allowedEvents": [
+        "pull_request",
+        "push"
+      ]
+    }
+  ],
+  "highRiskPaths": [
+    "**/auth/**",
+    "**/permissions/**",
+    "**/session*",
+    "**/session/**",
+    "src/lib/auth*",
+    "src/lib/auth/**",
+    "**/webhooks/**/verify*",
+    "**/*signature*verif*",
+    "**/secrets/**",
+    "**/migrations/**",
+    "**/schema.prisma",
+    "**/schema.sql",
+    "**/*.migration.*",
+    ".github/**",
+    "**/CODEOWNERS",
+    "**/release*.sh",
+    "**/publish*.sh",
+    "scripts/release/**",
+    "scripts/publish/**",
+    "**/gate-suite.json",
+    "config/high-risk-defaults.json",
+    ".github/workflows/truthful-attribution-gate.yml",
+    "packages/sdk-extensions/**",
+    "**/extension-loader/**",
+    "**/trust-gate/**",
+    "**/signature-gate/**",
+    "**/capability-registry/**",
+    "**/transport-registry/**",
+    "docs-site/astro.config.mjs",
+    "docs-site/src/content.config.ts",
+    "docs-site/integrations-registry.json",
+    "**/integrations-registry.json",
+    "scripts/sync-docs.mjs",
+    "scripts/docs-contract-gate.mjs",
+    "scripts/lib/docs-contract-rules.mjs"
+  ],
+  "lastAuditedAt": "2026-10-01",
+  "auditEvidence": "2026-10-01, the birth of this suite on the pull request that adds this file (cinatra#3882): the suite rollout tool read requiredContexts from this repository's own workflows at ddad4c751ff21c3427503679d7bb0721324fe2f3, every workflow that runs on each pull request into main, each reusable gate with the reusable workflow it calls read at the sha its caller pins, and highRiskPaths are the central defaults (config/high-risk-defaults.json, highRiskGlobs) of cinatra-ai/ci at 1e40675e1642dcc32d195f27b3deb285b4d3d6fc, the engine this repository's attribution caller pins; every listed context must be read green on that pull request's own head before this file's first merge. This commit moves the attribution caller's uses: pin and ref: input together from 8eede1022e835997d94974e4bd6205daf72131a2 to 1e40675e1642dcc32d195f27b3deb285b4d3d6fc, so that row binds on the runs of that pull request's own head."
+}

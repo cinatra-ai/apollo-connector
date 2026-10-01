@@ -1,13 +1,10 @@
 name: truthful-attribution-gate
-# Thin caller for the org-reusable truthful-attribution-gate (cinatra-ai/ci),
-# per the ratified truthful-attribution spec. WARN mode
-# (rollout): findings are annotated, the check is ALWAYS green —
-# it never fails a PR. No .github/gate-suite.json committed (WARN scope exercises
-# presence + the human arm; the gate-suite arm is not exercised without a suite).
-# Pinned to the immutable ci engine SHA proven green in the cinatra ENFORCE gate
-# today; the `# vX.Y.Z` marker on the `uses:` line tracks the org ci milestone, as
-# every other cinatra-ai/ci gate caller in this repo does (the 40-char SHA is the
-# source of truth; the marker is advisory).
+# Thin caller for the organization's reusable truthful-attribution-gate. The
+# engine is pinned twice, in the uses: line and in the ref: input, and both
+# name the same commit of the shared engine, one the organization's merge
+# machinery accepts. The comment on the uses: line is a build marker of that
+# commit for the pinned-action gate, not a release tag. A maintained rollout
+# tool moves both pins together with this repository's check suite.
 
 on:
   pull_request:
@@ -28,7 +25,7 @@ permissions:
 
 jobs:
   truthful-attribution-gate:                 # caller job id MUST stay this exact string
-    uses: cinatra-ai/ci/.github/workflows/truthful-attribution-gate.yml@8eede1022e835997d94974e4bd6205daf72131a2 # v0.1.0
+    uses: cinatra-ai/ci/.github/workflows/truthful-attribution-gate.yml@1e40675e1642dcc32d195f27b3deb285b4d3d6fc # v0+engine.1e40675e.grant.2
     with:
       mode: warn
-      ref: 8eede1022e835997d94974e4bd6205daf72131a2
+      ref: 1e40675e1642dcc32d195f27b3deb285b4d3d6fc # engine 1e40675e, grant revision 2
