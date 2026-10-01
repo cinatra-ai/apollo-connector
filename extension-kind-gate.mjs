@@ -157,6 +157,10 @@ export const HOST_PORT_NAMES = new Set([
 // inventory.SDK_PACKAGES — the only permitted first-party @cinatra-ai CODE deps.
 export const SDK_PACKAGES = new Set(["@cinatra-ai/sdk-extensions", "@cinatra-ai/sdk-ui"]);
 
+// inventory.HOST_SERVED_PACKAGES: virtual modules supplied by the host,
+// distinct from installed SDK packages. Mirrors the host-served class.
+export const HOST_SERVED_PACKAGES = new Set(["@cinatra-ai/design-primitives"]);
+
 // host-peer-value-import-ban.HOST_PEERS — value imports of these over the
 // serverEntry graph are forbidden (the prod file:// loader cannot resolve them).
 export const HOST_PEERS = new Set([
@@ -311,6 +315,7 @@ export function isSdkOnlyViolation(spec) {
   if (!base || !base.startsWith("@")) return false;
   const scope = base.split("/")[0];
   if (scope !== FIRST_PARTY_SCOPE) return false;
+  if (HOST_SERVED_PACKAGES.has(base)) return false;
   return !SDK_PACKAGES.has(base);
 }
 
